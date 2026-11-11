@@ -14,12 +14,12 @@ Aiko 是一个运行在本地的拟人化聊天 Agent。她不是“带聊天框
 
 ## 当前状态
 
-**项目处于设计文档阶段，代码尚未开始实现。**
+**Phase 0 进行中：工程骨架（M0/T0.1）已搭建并通过验收，业务功能尚未实现。**
 
 | 阶段 | 内容 | 状态 |
 |---|---|---|
 | 文档设计 | 需求 / 技术设计 / API 契约 / 数据库 / React 架构 / 人格锚点 | ✅ 完成 |
-| Phase 0 | 项目骨架、流式聊天链路验证 | ⬜ 未开始 |
+| Phase 0 | 项目骨架、流式聊天链路验证 | 🚧 骨架完成，链路验证中 |
 | Phase 1（MVP） | 消息持久化、会话恢复、状态引擎 | ⬜ 未开始 |
 | Phase 2 | 长期记忆与透明性 | ⬜ 未开始 |
 | Phase 3 | 语义检索与受控人格演化 | ⬜ 未开始 |
@@ -48,28 +48,39 @@ Aiko 是一个运行在本地的拟人化聊天 Agent。她不是“带聊天框
 | [docs/react-architecture.md](docs/react-architecture.md) | React 架构：组件设计、状态边界、渲染隔离 |
 | [docs/persona-core-v1.md](docs/persona-core-v1.md) | 人格锚点 v1：PERSONA_CORE 正文与初始 evolvable 配置 |
 
-## 规划中的项目结构
+## 项目结构
 
 ```text
 .
 ├─ apps/
-│  ├─ web/          # React 前端
-│  └─ server/       # Hono 后端服务
+│  ├─ web/          # React 前端（Vite + React 18 + Tailwind）
+│  └─ server/       # Hono 后端服务（当前提供 /api/health）
 ├─ packages/
 │  └─ shared/       # 前后端共享类型与 Zod schema
-├─ data/            # 本地 SQLite 数据（不入库）
+├─ data/            # 本地 SQLite 数据（未来，不入库）
 └─ docs/            # 设计文档
 ```
 
 ## 快速启动
 
-代码尚未实现，Phase 0 完成后补充完整说明。规划中的启动方式：
+环境要求：Node.js 20+（开发验证于 v24）、pnpm 10+。
 
 ```bash
 pnpm install
-pnpm --filter server dev   # 后端 http://127.0.0.1:8787
-pnpm --filter web dev      # 前端 http://127.0.0.1:5173
+
+# 方式一：同时启动前后端
+pnpm dev
+
+# 方式二：分开启动
+pnpm dev:server    # 后端 http://127.0.0.1:8787
+pnpm dev:web       # 前端 http://127.0.0.1:5173
+
+pnpm test          # 运行全部测试
+pnpm lint          # ESLint
+pnpm format        # Prettier
 ```
+
+LLM 配置：复制 `apps/server/.env.example` 为 `apps/server/.env`，填入 OpenAI 兼容端点的 Key。当前默认指向 DeepSeek（`https://api.deepseek.com` + `deepseek-chat`）；使用第三方中转站时只需修改 `LLM_BASE_URL` 与 `LLM_MODEL`。
 
 ## 安全与隐私
 
