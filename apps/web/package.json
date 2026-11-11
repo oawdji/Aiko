@@ -7,10 +7,13 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
+    "@ai-sdk/react": "^4.0.170",
     "@aiko/shared": "workspace:*",
+    "ai": "^7.0.166",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
@@ -21,6 +24,7 @@
     "@vitejs/plugin-react": "^4.5.0",
     "tailwindcss": "^4.1.0",
     "typescript": "^5.5.0",
-    "vite": "^6.3.0"
+    "vite": "^6.3.0",
+    "vitest": "^5.1.0"
   }
 }

@@ -3,6 +3,7 @@ import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { healthRoute } from './api/health';
+import { devMockChatRoute } from './api/dev-mock-chat';
 import { loadServerConfig } from './config/server';
 import { loadLlmConfig } from './config/llm';
 
@@ -16,6 +17,7 @@ app.use(
 );
 
 app.route('/api', healthRoute);
+app.route('/api', devMockChatRoute);
 
 try {
   const llm = loadLlmConfig();
