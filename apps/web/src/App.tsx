@@ -75,7 +75,7 @@ export default function App() {
         <header className="space-y-1 text-center">
           <h1 className="text-2xl font-semibold">Aiko</h1>
           <p className="text-sm text-neutral-400">
-            T0.3 · 流式协议验证（mock，无需 LLM Key）
+            T0.5 · 冒烟验证（mock，无需 LLM Key）
           </p>
           <p className="text-xs text-neutral-500">
             后端：
@@ -140,7 +140,7 @@ export default function App() {
                 send();
               }
             }}
-            placeholder="输入消息；包含“409”可测幂等冲突"
+            placeholder="试试：我刚才说了什么？（含“409”可测冲突）"
             className="flex-1 rounded-xl border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm outline-none focus:border-sky-600"
           />
           <button
@@ -196,7 +196,7 @@ export default function App() {
             <li>恢复消息渲染（T0.4）</li>
             <li>发送后流式文本逐块出现</li>
             <li>状态面板先于文本更新</li>
-            <li>发送含“409”的消息 → 展示错误</li>
+            <li>发送含“409”的消息 → 展示错误</li>`n            <li>多轮上下文：问“我刚才说了什么？”</li>
             <li>生成中点击“停止” → 中断流</li>
           </ul>
         </div>

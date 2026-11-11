@@ -6,6 +6,7 @@ import {
 import { Hono } from 'hono';
 import type { AgentStateEventData, AgentStateEvent } from '@aiko/shared';
 import { DEFAULT_AGENT_ID } from '@aiko/shared';
+import { toPromptWindow } from '../chat/recent-window';
 
 type MockChatRequestBody = {
   messages?: UIMessage[];
@@ -66,9 +67,22 @@ export const devMockChatRoute = new Hono().post(
       );
     }
 
-    const reply = echoed
-      ? `（模拟回复，无需 LLM Key）你说的是：“${echoed}”。这条消息来自 /api/dev/mock-chat 的流式验证。`
-      : '（模拟回复）这是一条无需 LLM Key 的流式验证消息。';
+    const window = toPromptWindow(body?.messages ?? []);
+    const userTexts = window
+      .filter((m) => m.role === 'user')
+      .map((m) => m.content)
+      .slice(-3);
+
+    const asksAboutEarlier =
+      /我刚才|说了什么|还记得|上一条|刚才说/.test(echoed) && userTexts.length > 0;
+
+    const reply = asksAboutEarlier
+      ? `（上下文窗口验证）根据进入 Prompt 的最近 ${window.length} 条消息，你最近说过：${userTexts
+          .map((text) => `“${text.slice(0, 30)}”`)
+          .join('、')}。`
+      : echoed
+        ? `（模拟回复，无需 LLM Key）你说的是：“${echoed}”。本次请求有 ${window.length} 条消息进入上下文窗口。`
+        : '（模拟回复）这是一条无需 LLM Key 的流式验证消息。';
 
     const stateData: AgentStateEventData = { event: mockStateEvent(echoed) };
 
