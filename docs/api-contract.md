@@ -4,7 +4,7 @@
 关联文档：[requirements.md](./requirements.md)、[technical-design.md](./technical-design.md)、[database-schema.md](./database-schema.md)  
 后端框架：Hono  
 传输协议：HTTP / Streaming  
-版本：v1.2  
+版本：v1.3  
 日期：2026-11-11
 
 ---
@@ -85,7 +85,7 @@ Content-Type: application/json
 Content-Type: application/json; charset=utf-8
 ```
 
-聊天流式响应使用 Vercel AI SDK UIMessage Stream 对应的媒体类型。具体 header 以 Phase 0 锁定的 Vercel AI SDK 版本为准。
+聊天流式响应使用 Vercel AI SDK UIMessage Stream，媒体类型为 `text/event-stream`（Phase 0 实测确认）。
 
 ---
 
@@ -1017,7 +1017,17 @@ export type AgentStateEventData = {
 }
 ```
 
-> 注意：以上是契约层逻辑结构，不承诺等于某个 Vercel AI SDK 版本的线上字节格式。Phase 0 必须锁定版本并编写集成测试确认实际 UIMessage Stream 编码。前端不得解析底层 chunk，只能通过 SDK 暴露的 message parts 或官方 adapter 读取。
+> **Phase 0 实测记录**（2026-11-11，锁定版本：`ai@7.0.166` + `@ai-sdk/react@4.0.170`，package.json 已固定精确版本）：
+>
+> 1. 传输格式为 SSE（`Content-Type: text/event-stream`），每帧形如 `data: {...}`；
+> 2. 自定义数据 part 实际线格式：`{"type":"data-agent-state-event","data":{...},"id":"state_xxx"}`；
+> 3. 文本增量 part 使用 `delta` 字段：`{"type":"text-delta","id":"...","delta":"..."}`（v5 为 `text`，v7 已改名）；
+> 4. 写入顺序可控：先写 data part 再写 text-delta，前端按相同顺序接收；
+> 5. 服务端 `createUIMessageStream` 返回 `ReadableStream`，需用 `createUIMessageStreamResponse({ stream })` 构造响应；
+> 6. 前端通过 `useChat` 的 `message.parts` 读取数据 part（`type === 'data-agent-state-event'`），`stop()` 中断流可用；
+> 7. 以上结论经 mock 端点、单元测试与浏览器验证；DeepSeek 真实端点行为待 API Key 配置后补充验证。
+>
+> 前端不得解析底层 chunk，只能通过 SDK 暴露的 message parts 或官方 adapter 读取。
 
 ## 13.8 无状态变化时
 
@@ -1423,5 +1433,5 @@ DELETE /api/data
 当前版本：
 
 ```text
-API contract v1.2
+API contract v1.3
 ```

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { DEFAULT_AGENT_ID, LOCAL_USER_ID } from '@aiko/shared';
+import { DEFAULT_AGENT_ID } from '@aiko/shared';
 import type { ChatMessageDTO } from '@aiko/shared';
 import { useRestoredChat } from './chat/hooks/useRestoredChat';
+import { extractStateEvents } from './chat/utils/extract-state-events';
 
 const RESTORED_MESSAGES: ChatMessageDTO[] = [
   {
@@ -48,7 +49,12 @@ export default function App() {
   const [serverStatus, setServerStatus] = useState<ServerStatus>('checking');
   const [input, setInput] = useState('');
 
-  const { messages, sendMessage, status } = useRestoredChat(RESTORED_MESSAGES);
+  const { messages, sendMessage, status, stop, error } = useRestoredChat(
+    RESTORED_MESSAGES,
+  );
+  const stateEvents = extractStateEvents(messages);
+  const latestEvent = stateEvents.at(-1) ?? null;
+  const isBusy = status === 'submitted' || status === 'streaming';
 
   useEffect(() => {
     fetch('/api/health')
@@ -58,82 +64,143 @@ export default function App() {
 
   const send = () => {
     const text = input.trim();
-    if (!text || status === 'submitted' || status === 'streaming') return;
+    if (!text || isBusy) return;
     setInput('');
     sendMessage({ text });
   };
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-4 bg-neutral-950 p-6 text-neutral-100">
-      <header className="space-y-1 text-center">
-        <h1 className="text-2xl font-semibold">Aiko</h1>
-        <p className="text-sm text-neutral-400">
-          T0.4 · useChat 恢复注入验证 · mock 流式（无需 LLM Key）
-        </p>
-        <p className="text-xs text-neutral-500">
-          后端：
-          {serverStatus === 'checking' && '检测中…'}
-          {serverStatus === 'ok' && <span className="text-emerald-400">已连接</span>}
-          {serverStatus === 'error' && <span className="text-red-400">未连接</span>}
-          {' · '}
-          Agent: {DEFAULT_AGENT_ID} · User: {LOCAL_USER_ID}
-        </p>
-      </header>
+    <main className="mx-auto flex min-h-screen max-w-5xl flex-col gap-4 bg-neutral-950 p-6 text-neutral-100 lg:flex-row">
+      <section className="flex min-w-0 flex-1 flex-col gap-3">
+        <header className="space-y-1 text-center">
+          <h1 className="text-2xl font-semibold">Aiko</h1>
+          <p className="text-sm text-neutral-400">
+            T0.3 · 流式协议验证（mock，无需 LLM Key）
+          </p>
+          <p className="text-xs text-neutral-500">
+            后端：
+            {serverStatus === 'checking' && '检测中…'}
+            {serverStatus === 'ok' && (
+              <span className="text-emerald-400">已连接</span>
+            )}
+            {serverStatus === 'error' && (
+              <span className="text-red-400">未连接</span>
+            )}
+          </p>
+        </header>
 
-      <section
-        aria-label="消息列表"
-        className="flex-1 space-y-3 overflow-y-auto rounded-xl border border-neutral-800 bg-neutral-900 p-4"
-      >
-        <p className="text-xs text-neutral-500">
-          —— 以下 3 条为注入的恢复消息（若可见即注入成功）——
-        </p>
-        {messages.map((message) => (
-          <div
-            key={message.id}
-            className={
-              message.role === 'user'
-                ? 'ml-auto max-w-[80%] rounded-xl bg-sky-900/60 px-3 py-2'
-                : 'mr-auto max-w-[80%] rounded-xl bg-neutral-800 px-3 py-2'
-            }
-          >
-            <div className="mb-0.5 text-xs text-neutral-400">
-              {roleLabel[message.role] ?? message.role}
+        <div
+          aria-label="消息列表"
+          className="flex-1 space-y-3 overflow-y-auto rounded-xl border border-neutral-800 bg-neutral-900 p-4"
+        >
+          <p className="text-xs text-neutral-500">
+            —— 以下 3 条为注入的恢复消息 ——
+          </p>
+          {messages.map((message) => (
+            <div
+              key={message.id}
+              className={
+                message.role === 'user'
+                  ? 'ml-auto max-w-[80%] rounded-xl bg-sky-900/60 px-3 py-2'
+                  : 'mr-auto max-w-[80%] rounded-xl bg-neutral-800 px-3 py-2'
+              }
+            >
+              <div className="mb-0.5 text-xs text-neutral-400">
+                {roleLabel[message.role] ?? message.role}
+              </div>
+              <div className="text-sm whitespace-pre-wrap">
+                {message.parts.map((part, index) =>
+                  part.type === 'text' ? (
+                    <span key={index}>{part.text}</span>
+                  ) : null,
+                )}
+              </div>
             </div>
-            <div className="text-sm whitespace-pre-wrap">
-              {message.parts.map((part, index) =>
-                part.type === 'text' ? <span key={index}>{part.text}</span> : null,
-              )}
-            </div>
+          ))}
+        </div>
+
+        {status === 'error' && (
+          <div className="rounded-xl border border-red-900 bg-red-950/50 px-3 py-2 text-sm text-red-300">
+            请求失败：
+            {error instanceof Error
+              ? error.message
+              : typeof error === 'string'
+                ? error
+                : '未知错误'}
+            （409 验证：发送包含“409”的消息触发）
           </div>
-        ))}
-        <p className="text-xs text-neutral-500">
-          —— 以上之后的是本轮发送的流式回复 ——
-        </p>
+        )}
+
+        <footer className="flex gap-2">
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                send();
+              }
+            }}
+            placeholder="输入消息；包含“409”可测幂等冲突"
+            className="flex-1 rounded-xl border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm outline-none focus:border-sky-600"
+          />
+          <button
+            type="button"
+            onClick={send}
+            disabled={!input.trim() || isBusy}
+            className="rounded-xl bg-sky-700 px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40 hover:bg-sky-600"
+          >
+            {isBusy ? '生成中…' : '发送'}
+          </button>
+          {isBusy && (
+            <button
+              type="button"
+              onClick={() => stop()}
+              className="rounded-xl bg-neutral-700 px-4 py-2 text-sm font-medium hover:bg-neutral-600"
+            >
+              停止
+            </button>
+          )}
+        </footer>
       </section>
 
-      <footer className="flex gap-2">
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
-              send();
-            }
-          }}
-          placeholder="输入消息，Enter 发送（回复来自 mock 端点）"
-          className="flex-1 rounded-xl border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm outline-none focus:border-sky-600"
-        />
-        <button
-          type="button"
-          onClick={send}
-          disabled={
-            !input.trim() || status === 'submitted' || status === 'streaming'
-          }
-          className="rounded-xl bg-sky-700 px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40 hover:bg-sky-600"
-        >
-          {status === 'submitted' || status === 'streaming' ? '生成中…' : '发送'}
-        </button>
-      </footer>
+      <aside className="w-full shrink-0 space-y-3 lg:w-80">
+        <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-4">
+          <h2 className="mb-2 text-sm font-semibold">状态事件（data part）</h2>
+          {latestEvent ? (
+            <div className="space-y-1 text-xs text-neutral-300">
+              <p>
+                valence:{' '}
+                <span className="text-sky-400">
+                  {latestEvent.after.valence.toFixed(2)}
+                </span>{' '}
+                / arousal:{' '}
+                <span className="text-amber-400">
+                  {latestEvent.after.arousal.toFixed(2)}
+                </span>{' '}
+                / tag: <span className="text-emerald-400">{latestEvent.discreteTag}</span>
+              </p>
+              <p className="text-neutral-400">原因：{latestEvent.reason}</p>
+              <p className="text-neutral-500">
+                事件流顺序验证：状态事件应先于文本增量到达（共收到{' '}
+                {stateEvents.length} 个事件）
+              </p>
+            </div>
+          ) : (
+            <p className="text-xs text-neutral-500">尚未收到状态事件。</p>
+          )}
+        </div>
+
+        <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-4">
+          <h2 className="mb-2 text-sm font-semibold">验证清单</h2>
+          <ul className="list-inside list-disc space-y-1 text-xs text-neutral-400">
+            <li>恢复消息渲染（T0.4）</li>
+            <li>发送后流式文本逐块出现</li>
+            <li>状态面板先于文本更新</li>
+            <li>发送含“409”的消息 → 展示错误</li>
+            <li>生成中点击“停止” → 中断流</li>
+          </ul>
+        </div>
+      </aside>
     </main>
   );
 }
