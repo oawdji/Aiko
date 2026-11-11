@@ -4,7 +4,7 @@
 关联文档：[requirements.md](./requirements.md)、[technical-design.md](./technical-design.md)  
 数据库：SQLite  
 ORM：Drizzle ORM  
-版本：v1.1  
+版本：v1.2  
 日期：2026-11-11
 
 ---
@@ -888,6 +888,11 @@ CREATE TABLE app_settings (
 | `recent_window_rounds` | number | `15` | 近期窗口轮数 |
 | `max_context_messages` | number | `30` | 进入 Prompt 的最大消息数 |
 | `theme` | string | `"system"` | UI 主题 |
+| `llm_base_url` | string | 无行（未设置） | LLM 端点，OpenAI 兼容 |
+| `llm_model` | string | 无行（未设置） | 模型名 |
+| `llm_api_key` | string | 无行（未设置） | API Key，只写不读 |
+
+LLM 连接键按需写入：未写入时回退到环境变量；写入后覆盖环境变量。
 
 `value_json` 示例：
 
@@ -915,6 +920,17 @@ CREATE TABLE app_settings (
 | `recent_window_rounds` | 10 到 15 |
 | `max_context_messages` | 20 到 30，且等于 `recent_window_rounds * 2` |
 | `theme` | `light` / `dark` / `system` |
+| `llm_base_url` | 合法 http(s) URL |
+| `llm_model` | 非空字符串 |
+| `llm_api_key` | 非空字符串；明文保存于本地库，任何 API 响应不得返回完整值 |
+
+`llm_api_key` 安全规则：
+
+- 明文保存在本地 SQLite，依赖本机访问控制保护数据库文件；
+- 读取时只生成掩码提示（如 `sk-***x3f`）返回给前端；
+- 不进入日志、调试信息与 Prompt 快照；
+- 不包含在数据导出中；
+- “删除全部数据”时必须删除。
 
 ---
 

@@ -4,7 +4,7 @@
 关联文档：[requirements.md](./requirements.md)、[technical-design.md](./technical-design.md)、[api-contract.md](./api-contract.md)  
 前端技术栈：React 18 + TypeScript + Vite  
 状态管理：Vercel AI SDK `useChat` + Zustand + React Query  
-版本：v1.1  
+版本：v1.2  
 日期：2026-11-11
 
 ---
@@ -182,6 +182,9 @@ apps/web/src/
 │     └─ conversation-store.ts
 │
 ├─ settings/
+│  ├─ components/
+│  │  ├─ SettingsPanel.tsx
+│  │  └─ LlmConnectionSection.tsx
 │  ├─ store/
 │  │  └─ settings-store.ts
 │  └─ types.ts
@@ -440,6 +443,15 @@ MVP 推荐使用 React Query：
 如果 UI 需要非服务端派生的本地偏好，可再引入 SettingsStore。
 
 禁止把设置放进入 `ConversationStore` 或 `AgentStateStore`。
+
+### LLM 连接区块
+
+`LlmConnectionSection` 展示与修改 LLM 连接：
+
+- 显示 `baseUrl` 与 `model`，可编辑；
+- API Key 只写不读：输入框提交成功后立即清空，界面只显示 `apiKeyConfigured` 与掩码提示；
+- 提供测试连接按钮，展示成功 / 失败与耗时；
+- 任何情况下不得在组件状态、日志或错误信息中保留完整 Key。
 
 ---
 

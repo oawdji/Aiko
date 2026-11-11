@@ -4,7 +4,7 @@
 关联文档：[requirements.md](./requirements.md)、[technical-design.md](./technical-design.md)、[database-schema.md](./database-schema.md)  
 后端框架：Hono  
 传输协议：HTTP / Streaming  
-版本：v1.1  
+版本：v1.2  
 日期：2026-11-11
 
 ---
@@ -382,6 +382,25 @@ export type ApiError = {
 ```
 
 `details` 仅用于确定性、可展示的校验信息，不得包含敏感内部数据。
+
+---
+
+## 4.9 `LlmConnectionInfo`
+
+```ts
+export type LlmConnectionInfo = {
+  baseUrl: string;
+  model: string;
+  apiKeyConfigured: boolean;
+  apiKeyHint: string | null;
+};
+```
+
+约束：
+
+- `apiKeyHint` 为掩码提示（如 `sk-***x3f`），不得包含完整 Key；
+- `apiKeyConfigured` 为 `false` 时 `apiKeyHint` 必须为 `null`；
+- 连接配置优先级：数据库设置 > 环境变量 > 未配置。
 
 ---
 
@@ -771,6 +790,7 @@ GET /api/settings
 ```ts
 export type SettingsResponse = {
   settings: AppSettings;
+  llm: LlmConnectionInfo;
 };
 ```
 
@@ -790,6 +810,9 @@ export type UpdateSettingsRequestBody = {
   theme?: AppTheme;
   recentWindowRounds?: number;
   maxContextMessages?: number;
+  llmBaseUrl?: string;
+  llmModel?: string;
+  llmApiKey?: string | null;
 };
 ```
 
@@ -812,6 +835,7 @@ export type UpdateSettingsRequestBody = {
 ```ts
 export type SettingsResponse = {
   settings: AppSettings;
+  llm: LlmConnectionInfo;
 };
 ```
 
@@ -823,6 +847,9 @@ export type SettingsResponse = {
 | `recentWindowRounds` | 10 到 15 的整数 |
 | `maxContextMessages` | 20 到 30 的整数 |
 | `maxContextMessages` | 必须等于 `recentWindowRounds * 2` |
+| `llmBaseUrl` | 合法 http(s) URL |
+| `llmModel` | 非空字符串 |
+| `llmApiKey` | 非空字符串或 `null`；`null` 表示清除已保存的 Key |
 
 如果请求同时传两个字段但不满足关系，返回：
 
@@ -843,6 +870,29 @@ defaultAgentId
 ```
 
 原因是当前只有一个默认 Agent，切换逻辑未实现。
+
+## 12.6 `POST /api/settings/llm/test`
+
+用途：使用当前生效的 LLM 连接配置发起一次最小模型请求，验证可用性。
+
+请求：无请求体。
+
+响应：
+
+```ts
+export type LlmConnectionTestResponse = {
+  ok: boolean;
+  latencyMs: number;
+  errorCode: string | null;
+};
+```
+
+规则：
+
+- 该接口会产生一次真实 LLM 调用；
+- 测试结果不改变现有配置；
+- `llmApiKey` 只写不读，任何响应均不得回显完整 Key；
+- 失败时 `errorCode` 使用现有错误码（如 `LLM_REQUEST_FAILED`），不暴露 Key 或完整 Prompt。
 
 ---
 
@@ -1373,5 +1423,5 @@ DELETE /api/data
 当前版本：
 
 ```text
-API contract v1.1
+API contract v1.2
 ```
