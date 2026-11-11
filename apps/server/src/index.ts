@@ -1,8 +1,10 @@
+import 'dotenv/config';
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { healthRoute } from './api/health';
 import { loadServerConfig } from './config/server';
+import { loadLlmConfig } from './config/llm';
 
 const app = new Hono();
 
@@ -14,6 +16,13 @@ app.use(
 );
 
 app.route('/api', healthRoute);
+
+try {
+  const llm = loadLlmConfig();
+  console.log(`LLM ready: ${llm.baseUrl} / ${llm.model}`);
+} catch (error) {
+  console.warn(`[warn] ${error instanceof Error ? error.message : String(error)}`);
+}
 
 const config = loadServerConfig();
 
