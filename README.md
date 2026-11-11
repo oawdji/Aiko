@@ -14,12 +14,13 @@ Aiko 是一个运行在本地的拟人化聊天 Agent。她不是“带聊天框
 
 ## 当前状态
 
-**Phase 0 进行中：工程骨架（M0/T0.1）已搭建并通过验收，业务功能尚未实现。**
+**Phase 0 基本完成：工程骨架（T0.1）、LLM Provider 层（T0.2）、流式协议验证（T0.3）、恢复注入验证（T0.4）、上下文窗口冒烟（T0.5）均已通过 mock 验证。** 唯一遗留项：DeepSeek 真实端点的流式行为待 API Key 配置后补验。业务功能（数据库、会话恢复、状态引擎）尚未开始。
 
 | 阶段 | 内容 | 状态 |
 |---|---|---|
-| 文档设计 | 需求 / 技术设计 / API 契约 / 数据库 / React 架构 / 人格锚点 | ✅ 完成 |
-| Phase 0 | 项目骨架、流式聊天链路验证 | 🚧 骨架完成，链路验证中 |
+| 文档设计 | 需求 / 技术设计 / API 契约 / 数据库 / React 架构 / 人格锚点 / LLM 连接设置 | ✅ 完成 |
+| Phase 0 | 项目骨架、LLM 层、流式协议、恢复注入、上下文窗口 | ✅ mock 验证通过（真实端点待补验） |
+| Phase 1（MVP） | 消息持久化、会话恢复、状态引擎 | ⬜ 未开始 |
 | Phase 1（MVP） | 消息持久化、会话恢复、状态引擎 | ⬜ 未开始 |
 | Phase 2 | 长期记忆与透明性 | ⬜ 未开始 |
 | Phase 3 | 语义检索与受控人格演化 | ⬜ 未开始 |
@@ -31,7 +32,7 @@ Aiko 是一个运行在本地的拟人化聊天 Agent。她不是“带聊天框
 前端：React 18 + TypeScript + Vite
 后端：Node.js 20+ + TypeScript + Hono
 数据库：SQLite + Drizzle ORM
-聊天协议：Vercel AI SDK（UIMessage Stream）
+聊天协议：Vercel AI SDK v7（UIMessage Stream，已锁定 ai@7.0.166 / @ai-sdk/react@4.0.170）
 状态管理：Zustand + React Query
 工程：pnpm workspace monorepo
 测试：Vitest + Testing Library，Playwright 后期引入
@@ -53,12 +54,18 @@ Aiko 是一个运行在本地的拟人化聊天 Agent。她不是“带聊天框
 ```text
 .
 ├─ apps/
-│  ├─ web/          # React 前端（Vite + React 18 + Tailwind）
-│  └─ server/       # Hono 后端服务（当前提供 /api/health）
+│  ├─ web/               # React 前端（Vite + React 18 + Tailwind）
+│  │  └─ src/chat/       # useChat 恢复注入、data part 提取、状态事件
+│  └─ server/            # Hono 后端服务
+│     └─ src/
+│        ├─ api/         # /api/health、/api/dev/mock-chat（无需 Key 的流式验证端点）
+│        ├─ chat/        # 近期窗口原型 toPromptWindow
+│        ├─ llm/         # OpenAI 兼容 Provider 单例（DeepSeek / 第三方站）
+│        └─ config/      # 服务与 LLM 环境变量校验（fail-fast）
 ├─ packages/
-│  └─ shared/       # 前后端共享类型与 Zod schema
-├─ data/            # 本地 SQLite 数据（未来，不入库）
-└─ docs/            # 设计文档
+│  └─ shared/            # 共享类型（情绪 / 状态事件 / 消息 DTO）与 Zod schema
+├─ data/                 # 本地 SQLite 数据（M1 落地，不入库）
+└─ docs/                 # 设计文档
 ```
 
 ## 快速启动
@@ -75,18 +82,27 @@ pnpm dev
 pnpm dev:server    # 后端 http://127.0.0.1:8787
 pnpm dev:web       # 前端 http://127.0.0.1:5173
 
-pnpm test          # 运行全部测试
+pnpm test          # 运行全部测试（当前 16 个）
 pnpm lint          # ESLint
 pnpm format        # Prettier
 ```
 
-LLM 配置：复制 `apps/server/.env.example` 为 `apps/server/.env`，填入 OpenAI 兼容端点的 Key。当前默认指向 DeepSeek（`https://api.deepseek.com` + `deepseek-chat`）；使用第三方中转站时只需修改 `LLM_BASE_URL` 与 `LLM_MODEL`。
+打开 http://127.0.0.1:5173 可看到 **Phase 0 验证页**（无需 LLM Key）：
+
+- 恢复消息注入渲染（刷新恢复的技术验证）；
+- mock 流式回复逐块出现；
+- 状态事件（`data-agent-state-event`）先于文本增量到达并在右侧面板展示；
+- 发送包含“409”的消息可触发幂等冲突错误展示；
+- 生成中可点击“停止”中断流；
+- 发送“我刚才说了什么？”可验证多轮上下文窗口。
+
+LLM 配置（可选，真实端点验证时才需要）：复制 `apps/server/.env.example` 为 `apps/server/.env`，填入 OpenAI 兼容端点的 Key。默认指向 DeepSeek（`https://api.deepseek.com` + `deepseek-chat`）；第三方中转站只需修改 `LLM_BASE_URL` 与 `LLM_MODEL`。后续 T0.6 将提供前端设置面板，支持在页面内切换端点与写入 Key（仅存本地、永不回显）。
 
 ## 安全与隐私
 
 - 本地单用户应用，后端仅监听 `127.0.0.1`，不暴露到局域网或公网；
 - 所有业务数据保存在本机 SQLite（`data/`），不自动上传云端；
-- LLM API Key 只从本地环境变量读取，不入库、不写日志，前端不接触；
+- LLM API Key 支持环境变量或本地设置面板写入（存于本机 SQLite），任何接口不回显完整 Key、不写日志、不进数据导出；
 - 调用外部 LLM 时会携带近期对话内容，这一数据流向会在 UI 中明确告知。
 
 ## License
