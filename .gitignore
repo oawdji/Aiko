@@ -1,0 +1,18 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# env & local data
+.env
+.env.*
+!.env.example
+data/
+
+# build output
+dist/
+build/
+
+# logs & misc
+*.log
+.DS_Store
+Thumbs.db
