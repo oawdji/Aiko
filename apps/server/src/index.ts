@@ -6,6 +6,7 @@ import { healthRoute } from './api/health';
 import { devMockChatRoute } from './api/dev-mock-chat';
 import { loadServerConfig } from './config/server';
 import { loadLlmConfig } from './config/llm';
+import { getDb } from './db';
 
 const app = new Hono();
 
@@ -27,6 +28,9 @@ try {
 }
 
 const config = loadServerConfig();
+
+const db = getDb();
+console.log(`Database ready: ${db.databasePath}`);
 
 serve(
   { fetch: app.fetch, hostname: '127.0.0.1', port: config.port },
