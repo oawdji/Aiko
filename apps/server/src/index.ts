@@ -5,6 +5,7 @@ import { cors } from 'hono/cors';
 import { healthRoute } from './api/health';
 import { bootstrapRoute } from './bootstrap/route';
 import { conversationsRoute } from './conversations/route';
+import { chatRoute } from './chat/route';
 import { devMockChatRoute } from './api/dev-mock-chat';
 import { loadServerConfig } from './config/server';
 import { loadDbConfig } from './config/db';
@@ -25,6 +26,7 @@ app.use(
 app.route('/api', healthRoute);
 app.route('/api', bootstrapRoute);
 app.route('/api', conversationsRoute);
+app.route('/api', chatRoute);
 // mock 端点仅限开发环境，不随生产构建暴露
 if (process.env.NODE_ENV !== 'production') {
   app.route('/api', devMockChatRoute);
