@@ -14,13 +14,13 @@ Aiko 是一个运行在本地的拟人化聊天 Agent。她不是“带聊天框
 
 ## 当前状态
 
-**Phase 0 基本完成：工程骨架（T0.1）、LLM Provider 层（T0.2）、流式协议验证（T0.3）、恢复注入验证（T0.4）、上下文窗口冒烟（T0.5）均已通过 mock 验证。** 唯一遗留项：DeepSeek 真实端点的流式行为待 API Key 配置后补验。业务功能（数据库、会话恢复、状态引擎）尚未开始。
+**Phase 0 已完成（mock 验证；唯一遗留：DeepSeek 真实端点流式行为待 API Key 后补验）。M1 数据库与初始化已完成：SQLite 六张表、启动自动迁移、默认 Agent / persona v1 / 设置幂等 seed 全部就绪并通过约束测试。** 下一步：M2 Bootstrap 与会话恢复。
 
 | 阶段 | 内容 | 状态 |
 |---|---|---|
 | 文档设计 | 需求 / 技术设计 / API 契约 / 数据库 / React 架构 / 人格锚点 / LLM 连接设置 | ✅ 完成 |
 | Phase 0 | 项目骨架、LLM 层、流式协议、恢复注入、上下文窗口 | ✅ mock 验证通过（真实端点待补验） |
-| Phase 1（MVP） | 消息持久化、会话恢复、状态引擎 | ⬜ 未开始 |
+| Phase 1（MVP） | 消息持久化、会话恢复、状态引擎 | 🚧 M1 数据库与初始化 ✅，M2 Bootstrap 待开始 |
 | Phase 2 | 长期记忆与透明性 | ⬜ 未开始 |
 | Phase 3 | 语义检索与受控人格演化 | ⬜ 未开始 |
 | Phase 4 | 主动行为与遗忘 | ⬜ 未开始 |
@@ -56,11 +56,13 @@ Aiko 是一个运行在本地的拟人化聊天 Agent。她不是“带聊天框
 │  ├─ web/               # React 前端（Vite + React 18 + Tailwind）
 │  │  └─ src/chat/       # useChat 恢复注入、data part 提取、状态事件
 │  └─ server/            # Hono 后端服务
+│     ├─ drizzle/        # SQL 迁移（启动时自动执行，幂等）
 │     └─ src/
 │        ├─ api/         # /api/health、/api/dev/mock-chat（无需 Key 的流式验证端点）
 │        ├─ chat/        # 近期窗口原型 toPromptWindow
+│        ├─ db/          # 连接层 / 六表 schema / 迁移 / 幂等 seed / 锚点生成物
 │        ├─ llm/         # OpenAI 兼容 Provider 单例（DeepSeek / 第三方站）
-│        └─ config/      # 服务与 LLM 环境变量校验（fail-fast）
+│        └─ config/      # 服务 / LLM / 数据目录环境变量校验（fail-fast）
 ├─ packages/
 │  └─ shared/            # 共享类型（情绪 / 状态事件 / 消息 DTO）与 Zod schema
 ├─ data/                 # 本地 SQLite 数据（M1 落地，不入库）
@@ -81,7 +83,8 @@ pnpm dev
 pnpm dev:server    # 后端 http://127.0.0.1:8787
 pnpm dev:web       # 前端 http://127.0.0.1:5173
 
-pnpm test          # 运行全部测试（当前 16 个）
+pnpm test          # 运行全部测试（当前 43 个）
+pnpm gen:persona   # 从 docs/persona-core-v1.md 重新生成锚点模块
 pnpm lint          # ESLint
 pnpm format        # Prettier
 ```
