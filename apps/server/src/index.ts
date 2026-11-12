@@ -21,7 +21,10 @@ app.use(
 );
 
 app.route('/api', healthRoute);
-app.route('/api', devMockChatRoute);
+// mock 端点仅限开发环境，不随生产构建暴露
+if (process.env.NODE_ENV !== 'production') {
+  app.route('/api', devMockChatRoute);
+}
 
 try {
   const llm = loadLlmConfig();

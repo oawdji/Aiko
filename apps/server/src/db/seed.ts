@@ -1,4 +1,5 @@
 import { and, eq } from 'drizzle-orm';
+import { DEFAULT_AGENT_ID, DEFAULT_AGENT_SLUG } from '@aiko/shared';
 import {
   INITIAL_EVOLVABLE_JSON,
   PERSONA_CORE_HASH,
@@ -7,8 +8,7 @@ import {
 import { agents, appSettings, personaVersions } from './schema';
 import type { DbHandle } from './client';
 
-export const DEFAULT_AGENT_ID = 'agent-default';
-export const DEFAULT_AGENT_SLUG = 'default';
+// DEFAULT_AGENT_ID / DEFAULT_AGENT_SLUG 来自 @aiko/shared（单一事实来源）
 export const DEFAULT_PERSONA_ID = 'persona-default-v1';
 export const DEFAULT_PERSONA_VERSION = 1;
 
