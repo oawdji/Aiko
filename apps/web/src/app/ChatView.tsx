@@ -65,7 +65,7 @@ export function ChatView({ bootstrap }: { bootstrap: BootstrapResponse }) {
         {status === 'error' && (
           <ErrorNotice
             message={error instanceof Error ? error.message : String(error ?? '未知错误')}
-            hint="409 验证：发送包含“409”的消息触发"
+            hint={/DUPLICATE_CLIENT_MESSAGE/.test(error?.message ?? String(error)) ? "消息重复：已从服务端刷新会话，请勿重发同一内容" : "请检查本地服务与 LLM 配置后重试"}
           />
         )}
 

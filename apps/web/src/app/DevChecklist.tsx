@@ -1,19 +1,19 @@
 const ITEMS = [
-  '恢复消息渲染（T0.4）',
-  '发送后流式文本逐块出现',
-  '状态面板先于文本更新',
-  '发送含“409”的消息 → 展示错误',
-  '生成中点击“停止” → 中断流',
+  '刷新页面 → bootstrap 恢复历史消息与状态面板',
+  '发送消息 → 流式文本逐块出现',
+  '状态面板先于文本更新（data part 顺序）',
+  '重复提交同一消息 → 409 → 会话自动刷新',
+  '生成中点击“停止” → 中断流（CLIENT_ABORTED）',
   '多轮上下文：问“我刚才说了什么？”',
 ];
 
 /**
- * Phase 0 验证清单（开发辅助 UI，M2 起逐步移除）。
+ * 开发辅助清单（联调用）。
  */
 export function DevChecklist() {
   return (
     <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-4">
-      <h2 className="mb-2 text-sm font-semibold">验证清单</h2>
+      <h2 className="mb-2 text-sm font-semibold">联调清单</h2>
       <ul className="list-inside list-disc space-y-1 text-xs text-neutral-400">
         {ITEMS.map((item) => (
           <li key={item}>{item}</li>
