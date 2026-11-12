@@ -5,6 +5,10 @@ const API_BASE = '/api';
 const REQUEST_TIMEOUT_MS = 15_000;
 
 export type RequestOptions = {
+  /** 默认 GET；settings 更新使用 PATCH/POST。 */
+  method?: string;
+  /** JSON 请求体；提供时自动带 Content-Type。 */
+  body?: unknown;
   signal?: AbortSignal;
   /** 默认 15s；长连接类请求（聊天流）不走这层。 */
   timeoutMs?: number;
@@ -34,8 +38,17 @@ export async function requestJson<T>(
   let response: Response;
   try {
     response = await fetch(`${API_BASE}${path}`, {
+      method: options.method ?? 'GET',
       signal: compositeSignal,
-      headers: { Accept: 'application/json' },
+      headers: {
+        Accept: 'application/json',
+        ...(options.body !== undefined
+          ? { 'Content-Type': 'application/json' }
+          : {}),
+      },
+      ...(options.body !== undefined
+        ? { body: JSON.stringify(options.body) }
+        : {}),
     });
   } catch (error) {
     if (options.signal?.aborted) {
