@@ -9,6 +9,18 @@ import { DECAY_EPSILON, DEFAULT_DECAY_HALF_LIFE_HOURS } from '@aiko/shared';
  * - 回归不产生事件，由调用方折叠进下一条事件的 before。
  */
 
+/** agents 行中衰减引擎所需字段的结构视图（避免依赖 schema 模块，保持零依赖）。 */
+export type AgentStateRowLike = {
+  currentValence: number;
+  currentArousal: number;
+  currentDominance: number;
+  baselineValence: number;
+  baselineArousal: number;
+  baselineDominance: number;
+  decayHalfLifeHours: number | null;
+  stateUpdatedAt: string | null;
+};
+
 /**
  * 解析衰减配置：角色参数优先，全局默认兜底。
  * @param agentHalfLifeHours agents.decay_half_life_hours（可空）
@@ -26,6 +38,27 @@ function revertDim(x: number, baseline: number, theta: number, elapsedHours: num
   if (Math.abs(distance) < epsilon) return baseline;
   const reverted = baseline + distance * Math.exp(-theta * elapsedHours);
   return Math.abs(reverted - baseline) < epsilon ? baseline : reverted;
+}
+
+/**
+ * 展示态：快照按 stateUpdatedAt → now 的间隔回归（读时回归，不写库）。
+ * bootstrap 展示与 chat prompt 注入共用，保证「当时状态」语义一致（§10.11）。
+ */
+export function computeDisplayState(row: AgentStateRowLike, nowIso: string): AgentEmotionState {
+  const elapsedHours = row.stateUpdatedAt
+    ? (Date.parse(nowIso) - Date.parse(row.stateUpdatedAt)) / 3_600_000
+    : 0;
+  const snapshot: AgentEmotionState = {
+    valence: row.currentValence,
+    arousal: row.currentArousal,
+    dominance: row.currentDominance,
+  };
+  const baseline: AgentEmotionState = {
+    valence: row.baselineValence,
+    arousal: row.baselineArousal,
+    dominance: row.baselineDominance,
+  };
+  return revertToBaseline(snapshot, baseline, elapsedHours, resolveDecayConfig(row.decayHalfLifeHours));
 }
 
 /**

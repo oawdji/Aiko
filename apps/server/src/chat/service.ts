@@ -9,6 +9,7 @@ import {
 import {
   LOCAL_USER_ID,
   type AgentEmotionState,
+  type EmotionTag,
   type ChatRequestBody,
 } from '@aiko/shared';
 import { getChatModel } from '../llm/provider';
@@ -19,6 +20,8 @@ import { agents, conversations, messages, stateEvents } from '../db/schema';
 import { type PromptMessage } from './recent-window';
 import { EMOTION_RULES_VERSION, applyEmotion, computeTag, type EmotionExtraction } from './emotion-rules';
 import { defaultEmotionEngine, type EmotionEngine } from './emotion-engine';
+import { computeDisplayState, resolveDecayConfig, revertToBaseline } from './emotion-decay';
+import { buildEmotionPromptLine } from './emotion-prompt';
 
 export class ChatAgentNotFoundError extends Error {
   constructor(agentRef: string) {
@@ -198,11 +201,15 @@ export function applyStateEvent(
     throw new ChatAgentNotFoundError(params.agentId);
   }
 
-  const before = {
-    valence: agent.currentValence,
-    arousal: agent.currentArousal,
-    dominance: agent.currentDominance,
-  };
+  // 先基线回归（OU，§10.11），再叠加 delta；回归折叠进本事件 before，不落 time_decay 事件
+  const before = revertToBaseline(
+    { valence: agent.currentValence, arousal: agent.currentArousal, dominance: agent.currentDominance },
+    { valence: agent.baselineValence, arousal: agent.baselineArousal, dominance: agent.baselineDominance },
+    agent.stateUpdatedAt
+      ? (Date.parse(params.now) - Date.parse(agent.stateUpdatedAt)) / 3_600_000
+      : 0,
+    resolveDecayConfig(agent.decayHalfLifeHours),
+  );
   const { after, delta } = applyEmotion(before, params.extraction);
   const discreteTag = computeTag(after);
   const id = `state_${randomUUID()}`;
@@ -356,8 +363,13 @@ export async function runChatPipeline(
       })
     : null;
 
+  // Prompt 注入当前情绪（读时回归后的展示态，§10.11）
+  const agentRow = handle.db.select().from(agents).where(eq(agents.id, persisted.agentId)).get();
+  const emotionLine = agentRow
+    ? buildEmotionPromptLine(computeDisplayState(agentRow, now), agentRow.currentTag as EmotionTag)
+    : null;
   const prompt = {
-    system: PERSONA_CORE_MD,
+    system: emotionLine ? `${PERSONA_CORE_MD}\n\n${emotionLine}` : PERSONA_CORE_MD,
     messages: loadRecentWindow(handle, persisted.conversationId, 30),
   };
 

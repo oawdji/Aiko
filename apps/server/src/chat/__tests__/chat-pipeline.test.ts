@@ -165,4 +165,32 @@ describe('chat pipeline (M3.4)', () => {
       .get() as { n: number };
     expect(failedCount.n).toBeGreaterThanOrEqual(1);
   });
+
+  it('applies baseline regression before the new delta and injects the emotion line into the prompt (T6)', async () => {
+    // 快照 valence 0.4，6 小时前更新（= 一个半程）→ 回归到 0.2，再叠加「累」-0.1 → 0.1
+    handle.db.update(agents).set({
+      currentValence: 0.4,
+      currentArousal: 0,
+      currentDominance: 0,
+      currentTag: 'calm',
+      stateUpdatedAt: '2026-11-11T18:00:00.000Z',
+      updatedAt: '2026-11-11T18:00:00.000Z',
+    }).where(eq(agents.id, DEFAULT_AGENT_ID)).run();
+
+    let capturedSystem: string | undefined;
+    const pipeline = await runChatPipeline(
+      handle,
+      { ...baseBody, clientMessageId: 'client_pipe_regression' },
+      NOW,
+      (prompt) => {
+        capturedSystem = prompt.system;
+        return fakeLlm('好的。');
+      },
+    );
+
+    expect(pipeline.stateEvent?.before.valence).toBeCloseTo(0.2, 5);
+    expect(pipeline.stateEvent?.after.valence).toBeCloseTo(0.1, 5);
+    expect(capturedSystem).toContain('【当前情绪状态】');
+    expect(capturedSystem).toContain('calm');
+  });
 });

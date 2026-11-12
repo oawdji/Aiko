@@ -6,6 +6,8 @@ import { DEFAULT_AGENT_ID, LOCAL_USER_ID } from '@aiko/shared';
 import { createDb, type DbHandle } from '../../db/client';
 import { runMigrations } from '../../db/migrate';
 import { seedDefaultData } from '../../db/seed';
+import { eq } from 'drizzle-orm';
+import { agents } from '../../db/schema';
 import {
   AgentNotFoundError,
   BOOTSTRAP_MESSAGE_LIMIT,
@@ -174,5 +176,24 @@ describe('bootstrapAgent message ordering (refresh order regression)', () => {
     expect(response.conversation.id).toBe('conv_order');
     expect(response.messages.map((m) => m.id)).toEqual(['msg_zzz', 'msg_aaa']);
     expect(response.messages.map((m) => m.role)).toEqual(['user', 'assistant']);
+  });
+
+  it('applies read-time regression for display without persisting (T6)', () => {
+    // 快照 valence 0.4，12 小时前更新（两个半程）→ 展示态回归到 0.1
+    handle.db.update(agents).set({
+      currentValence: 0.4,
+      currentArousal: 0,
+      currentDominance: 0,
+      stateUpdatedAt: '2026-11-11T12:00:00.000Z',
+      updatedAt: '2026-11-11T12:00:00.000Z',
+    }).where(eq(agents.id, DEFAULT_AGENT_ID)).run();
+
+    const response = bootstrapAgent(handle, DEFAULT_AGENT_ID, NOW);
+    expect(response.agent.currentState.valence).toBeCloseTo(0.1, 5);
+    expect(response.agent.decayHalfLifeHours).toBeNull();
+
+    // 读时回归不写库
+    const row = handle.db.select().from(agents).where(eq(agents.id, DEFAULT_AGENT_ID)).get()!;
+    expect(row.currentValence).toBe(0.4);
   });
 });

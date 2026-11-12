@@ -16,13 +16,13 @@ type StateEventRow = typeof stateEvents.$inferSelect;
  * 避免 feature 之间相互 import。映射结果全部经 shared schema 出口校验。
  */
 
-export function mapAgentRow(row: AgentRow) {
+export function mapAgentRow(row: AgentRow, displayState?: { valence: number; arousal: number; dominance: number }) {
   return AgentDTOSchema.parse({
     id: row.id,
     slug: row.slug,
     displayName: row.displayName,
     description: row.description,
-    currentState: {
+    currentState: displayState ?? {
       valence: row.currentValence,
       arousal: row.currentArousal,
       dominance: row.currentDominance,

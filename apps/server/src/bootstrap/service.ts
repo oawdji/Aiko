@@ -14,6 +14,7 @@ import {
 } from '../db/mappers';
 import { agents, conversations, messages, stateEvents } from '../db/schema';
 import { readAppSettings } from '../settings/service';
+import { computeDisplayState } from '../chat/emotion-decay';
 
 /** Bootstrap 恢复的消息窗口，见 api-contract.md §7.5。 */
 export const BOOTSTRAP_MESSAGE_LIMIT = 30;
@@ -96,7 +97,8 @@ export function bootstrapAgent(handle: DbHandle, agentRef: string, now: string):
 
   return BootstrapResponseSchema.parse({
     user: { id: LOCAL_USER_ID },
-    agent: mapAgentRow(agent),
+    // 读时回归：展示态随时间回归基线，但不写库（§10.11）
+    agent: mapAgentRow(agent, computeDisplayState(agent, now)),
     conversation: mapConversationRow(conversation),
     messages: recentMessages.map(mapMessageRow),
     latestStateEvent: latestStateEvent ? mapStateEventRow(latestStateEvent) : null,
