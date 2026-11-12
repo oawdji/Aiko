@@ -9,6 +9,7 @@ import { loadDbConfig } from './config/db';
 import { loadLlmConfig } from './config/llm';
 import { getDb } from './db';
 import { runMigrations } from './db/migrate';
+import { seedDefaultData } from './db/seed';
 
 const app = new Hono();
 
@@ -34,7 +35,8 @@ const config = loadServerConfig();
 const dbConfig = loadDbConfig();
 const db = getDb();
 runMigrations(db, dbConfig.migrationsFolder);
-console.log(`Database ready (migrations applied): ${db.databasePath}`);
+seedDefaultData(db, new Date().toISOString());
+console.log(`Database ready (migrations + seed applied): ${db.databasePath}`);
 
 serve(
   { fetch: app.fetch, hostname: '127.0.0.1', port: config.port },
