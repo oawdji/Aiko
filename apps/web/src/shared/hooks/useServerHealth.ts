@@ -1,18 +1,20 @@
 import { useEffect, useState } from 'react';
+import { fetchHealth } from '../api/chat-recovery';
 
 export type ServerStatus = 'checking' | 'ok' | 'error';
 
-/**
- * Phase 0 过渡实现：组件不直接 fetch 的临时归所。
- * M2 将统一迁移到 src/api/client.ts 的 fetchBootstrap 领域函数。
- */
+/** 服务健康探测：组件侧只经由领域函数 fetchHealth 访问 API（M2.4）。 */
 export function useServerHealth(): ServerStatus {
   const [status, setStatus] = useState<ServerStatus>('checking');
 
   useEffect(() => {
-    fetch('/api/health')
-      .then((res) => setStatus(res.ok ? 'ok' : 'error'))
-      .catch(() => setStatus('error'));
+    const controller = new AbortController();
+    fetchHealth({ signal: controller.signal })
+      .then(() => setStatus('ok'))
+      .catch(() => {
+        if (!controller.signal.aborted) setStatus('error');
+      });
+    return () => controller.abort();
   }, []);
 
   return status;

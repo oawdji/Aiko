@@ -290,3 +290,14 @@ export type AgentStateResponse = z.infer<typeof AgentStateResponseSchema>;
 export type StateEventPageResponse = z.infer<typeof StateEventPageResponseSchema>;
 export type SettingsResponse = z.infer<typeof SettingsResponseSchema>;
 export type LlmConnectionTestResponse = z.infer<typeof LlmConnectionTestResponseSchema>;
+// ---------------------------------------------------------------------------
+// 健康检查（内部运维端点，非对外契约）
+// ---------------------------------------------------------------------------
+
+export const HealthResponseSchema = z.object({
+  status: z.enum(['ok', 'error']),
+  service: z.string().min(1),
+  db: z.enum(['ok', 'error']),
+  time: z.string(),
+});
+export type HealthResponse = z.infer<typeof HealthResponseSchema>;
