@@ -19,6 +19,8 @@ const validBody = {
   clientMessageId: 'client_1',
 };
 
+type StoredMessage = { id: string; client_message_id: string; role: string; status: string; error_code: string | null }
+
 type ErrorBody = { code: string; message: string; details?: { existingMessageId?: string } };
 
 function post(body: unknown, headers: Record<string, string> = {}) {
@@ -91,12 +93,11 @@ describe('POST /api/chat validation (M3.1)', () => {
 });
 
 describe('POST /api/chat persistence + idempotency (M3.2)', () => {
-  it('persists user message then stops at pipeline stub (500 until M3.4)', async () => {
+  it('persists user message then fails at LLM config (500 LLM_REQUEST_FAILED until key set)', async () => {
     const res = await post(validBody);
     expect(res.status).toBe(500);
     const body = (await res.json()) as ErrorBody;
-    expect(body.code).toBe('INTERNAL_ERROR');
-    expect(body.message).toContain('M3.4');
+    expect(body.code).toBe('LLM_REQUEST_FAILED');
 
     const handle = createDb(path.join(process.env.DATA_DIR!, 'agent.sqlite'));
     const stored = handle.db
@@ -105,13 +106,17 @@ describe('POST /api/chat persistence + idempotency (M3.2)', () => {
       .all();
     void stored;
     const messages = handle.sqlite
-      .prepare('SELECT * FROM messages WHERE conversation_id = ?')
-      .all(validBody.conversationId) as Array<{ id: string; client_message_id: string; role: string; status: string }>;
-    expect(messages).toHaveLength(1);
+      .prepare("SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at, CASE role WHEN 'user' THEN 0 ELSE 1 END")
+      .all(validBody.conversationId) as StoredMessage[];
+    expect(messages).toHaveLength(2); // M3.4: failed assistant 占位（§15.2）
     const first = messages[0]!;
+    const second = messages[1]!;
     expect(first.client_message_id).toBe(validBody.clientMessageId);
     expect(first.role).toBe('user');
     expect(first.status).toBe('complete');
+    expect(second.role).toBe('assistant');
+    expect(second.status).toBe('failed');
+    expect(second.error_code).toBe('LLM_REQUEST_FAILED');
 
     const conv = handle.sqlite
       .prepare('SELECT last_message_at FROM conversations WHERE id = ?')

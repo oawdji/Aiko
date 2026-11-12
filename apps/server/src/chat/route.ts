@@ -10,6 +10,7 @@ import {
   ChatConversationNotFoundError,
   DuplicateClientMessageError,
   handleChatRequest,
+  LlmRequestFailedError,
 } from './service';
 
 /** 普通 JSON 请求体大小上限（api-contract.md §3.2：聊天 ≤ 128KB）。 */
@@ -76,6 +77,13 @@ export const chatRoute = new Hono().post('/chat', async (c) => {
         message: error.message,
       };
       return c.json(body, 404);
+    }
+    if (error instanceof LlmRequestFailedError) {
+      const body: ApiError = {
+        code: 'LLM_REQUEST_FAILED',
+        message: 'LLM request failed. Please check LLM config or retry later.',
+      };
+      return c.json(body, 500);
     }
     if (error instanceof ChatConversationNotFoundError) {
       const body: ApiError = {
