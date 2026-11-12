@@ -2,21 +2,17 @@ import { randomUUID } from 'node:crypto';
 import { and, desc, eq, or, sql } from 'drizzle-orm';
 import {
   LOCAL_USER_ID,
-  AgentDTOSchema,
-  AppSettingsSchema,
   BootstrapResponseSchema,
-  ChatMessageDTOSchema,
-  ConversationDTOSchema,
   type BootstrapResponse,
 } from '@aiko/shared';
 import type { DbHandle } from '../db/client';
 import {
-  agents,
-  appSettings,
-  conversations,
-  messages,
-  stateEvents,
-} from '../db/schema';
+  mapAgentRow,
+  mapConversationRow,
+  mapMessageRow,
+  mapStateEventRow,
+} from '../db/mappers';
+import { agents, appSettings, conversations, messages, stateEvents } from '../db/schema';
 
 /** Bootstrap 恢复的消息窗口，见 api-contract.md §7.5。 */
 export const BOOTSTRAP_MESSAGE_LIMIT = 30;
@@ -97,48 +93,13 @@ export function bootstrapAgent(handle: DbHandle, agentRef: string, now: string):
     .orderBy(desc(stateEvents.createdAt), desc(stateEvents.id))
     .get();
 
-  const settings = readAppSettings(handle);
-
   return BootstrapResponseSchema.parse({
     user: { id: LOCAL_USER_ID },
-    agent: AgentDTOSchema.parse({
-      id: agent.id,
-      slug: agent.slug,
-      displayName: agent.displayName,
-      description: agent.description,
-      currentState: {
-        valence: agent.currentValence,
-        arousal: agent.currentArousal,
-      },
-      currentTag: agent.currentTag,
-      stateUpdatedAt: agent.stateUpdatedAt,
-      personaVersion: agent.activePersonaVersion,
-    }),
-    conversation: ConversationDTOSchema.parse({
-      id: conversation.id,
-      agentId: conversation.agentId,
-      title: conversation.title,
-      lastMessageAt: conversation.lastMessageAt,
-      isArchived: conversation.isArchived === 1,
-      createdAt: conversation.createdAt,
-      updatedAt: conversation.updatedAt,
-    }),
-    messages: recentMessages.map((row) =>
-      ChatMessageDTOSchema.parse({
-        id: row.id,
-        conversationId: row.conversationId,
-        agentId: row.agentId,
-        role: row.role,
-        content: row.content,
-        status: row.status,
-        errorCode: row.errorCode,
-        createdAt: row.createdAt,
-      }),
-    ),
-    latestStateEvent: latestStateEvent
-      ? parseStateEventRow(latestStateEvent)
-      : null,
-    settings,
+    agent: mapAgentRow(agent),
+    conversation: mapConversationRow(conversation),
+    messages: recentMessages.map(mapMessageRow),
+    latestStateEvent: latestStateEvent ? mapStateEventRow(latestStateEvent) : null,
+    settings: readAppSettings(handle),
   });
 }
 
@@ -147,48 +108,10 @@ export function readAppSettings(handle: DbHandle) {
   const rows = handle.db.select().from(appSettings).all();
   const values = new Map(rows.map((row) => [row.key, JSON.parse(row.valueJson)]));
 
-  return AppSettingsSchema.parse({
+  return BootstrapResponseSchema.shape.settings.parse({
     defaultAgentId: values.get('default_agent_id'),
     recentWindowRounds: values.get('recent_window_rounds'),
     maxContextMessages: values.get('max_context_messages'),
     theme: values.get('theme'),
   });
-}
-
-/** snake_case 行 → camelCase DTO（state_events 专用）。 */
-export function parseStateEventRow(row: {
-  id: string;
-  agentId: string;
-  conversationId: string;
-  triggerMessageId: string | null;
-  source: string;
-  ruleVersion: string;
-  beforeValence: number;
-  beforeArousal: number;
-  deltaValence: number;
-  deltaArousal: number;
-  afterValence: number;
-  afterArousal: number;
-  discreteTag: string;
-  reason: string;
-  evidenceText: string;
-  confidence: number;
-  createdAt: string;
-}) {
-  return {
-    id: row.id,
-    agentId: row.agentId,
-    conversationId: row.conversationId,
-    triggerMessageId: row.triggerMessageId,
-    source: row.source,
-    ruleVersion: row.ruleVersion,
-    before: { valence: row.beforeValence, arousal: row.beforeArousal },
-    delta: { valence: row.deltaValence, arousal: row.deltaArousal },
-    after: { valence: row.afterValence, arousal: row.afterArousal },
-    discreteTag: row.discreteTag,
-    reason: row.reason,
-    evidenceText: row.evidenceText,
-    confidence: row.confidence,
-    createdAt: row.createdAt,
-  };
 }
