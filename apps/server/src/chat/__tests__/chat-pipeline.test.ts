@@ -93,7 +93,7 @@ describe('chat pipeline (M3.4)', () => {
     const event = handle.sqlite
       .prepare('SELECT * FROM state_events WHERE trigger_message_id = ?')
       .get(pipeline.userMessageId) as Record<string, unknown>;
-    expect(event.rule_version).toBe('emotion-rules-v1');
+    expect(event.rule_version).toBe('emotion-rules-v2');
     expect(event.discrete_tag).toBe('low');
     expect(event.source).toBe('user_message');
 

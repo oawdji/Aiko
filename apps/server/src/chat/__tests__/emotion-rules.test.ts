@@ -10,7 +10,7 @@ import {
 
 describe('extractEmotion (M3.3)', () => {
   it('exposes the frozen rule version', () => {
-    expect(EMOTION_RULES_VERSION).toBe('emotion-rules-v1');
+    expect(EMOTION_RULES_VERSION).toBe('emotion-rules-v2');
   });
 
   it('returns null when no clue is found', () => {
@@ -43,6 +43,17 @@ describe('extractEmotion (M3.3)', () => {
     expect(result?.evidenceText).toBe('开心');
   });
 
+  it('extracts dominance-only cues (v2)', () => {
+    const result = extractEmotion('都听我的');
+    expect(result?.delta).toEqual({ valence: 0, arousal: 0.04, dominance: -0.06 });
+    expect(result?.confidence).toBe(0.5);
+  });
+
+  it('sums repeated dominance cues', () => {
+    const result = extractEmotion('听我的，听我的，帮帮我');
+    expect(result?.delta.dominance).toBe(-0.16);
+  });
+
   it('does not treat 不 far away as negation', () => {
     const result = extractEmotion('不想说话，但是今天好累');
     // 「不」距离「累」超过 2 字符，正常命中
@@ -60,6 +71,20 @@ describe('applyEmotion (M3.3)', () => {
       reason: 'x',
     });
     expect(after).toEqual({ valence: 1, arousal: -1, dominance: 0 });
+  });
+
+  it('applies and truncates dominance delta', () => {
+    const { after, delta } = applyEmotion(
+      { valence: 0, arousal: 0, dominance: 0 },
+      {
+        delta: { valence: 0, arousal: 0, dominance: 0.36 },
+        confidence: 0.5,
+        evidenceText: 'x',
+        reason: 'x',
+      },
+    );
+    expect(delta.dominance).toBe(EMOTION_DELTA_LIMIT);
+    expect(after.dominance).toBe(EMOTION_DELTA_LIMIT);
   });
 
   it('truncates per-message delta beyond ±0.3', () => {
