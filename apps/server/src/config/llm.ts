@@ -34,3 +34,6 @@ export function loadLlmConfig(env: NodeJS.ProcessEnv = process.env): LlmConfig {
     model: result.data.LLM_MODEL,
   };
 }
+/** 设置页与环境变量均未配置时的兜底端点（OpenAI 兼容）。 */
+export const LLM_DEFAULT_BASE_URL = 'https://api.deepseek.com';
+export const LLM_DEFAULT_MODEL = 'deepseek-chat';

@@ -11,6 +11,7 @@ import {
   type ChatRequestBody,
 } from '@aiko/shared';
 import { getChatModel } from '../llm/provider';
+import { resolveEffectiveLlmSettings } from '../settings/service';
 import type { DbHandle } from '../db/client';
 import { PERSONA_CORE_MD } from '../db/generated/persona-core';
 import { agents, conversations, messages, stateEvents } from '../db/schema';
@@ -291,23 +292,39 @@ function writeAssistantMessage(
     .run();
 }
 
-/** 默认 LLM 工厂：OpenAI 兼容端点（DeepSeek/中转站），失败映射为契约错误。 */
-export const defaultLlmStreamFactory: LlmStreamFactory = ({ system, messages: prompt }) => {
-  try {
-    const result = streamText({
-      model: getChatModel(),
-      system,
-      messages: prompt,
-    });
-    return {
-      text: result.text,
-      toUimessageStream: () => result.toUIMessageStream(),
-    };
-  } catch (error) {
-    // 配置缺失等同步失败也归一为 LLM_REQUEST_FAILED
-    throw new LlmRequestFailedError(error instanceof Error ? error.message : undefined);
-  }
-};
+/**
+ * 默认 LLM 工厂：每次调用时解析生效配置（app_settings 覆盖 > 环境变量 > 默认值），
+ * 失败（含未配置 Key）映射为契约错误。设置修改后热生效、无需重启。
+ */
+export function createDefaultLlmStreamFactory(handle: DbHandle): LlmStreamFactory {
+  return ({ system, messages: prompt }) => {
+    try {
+      const settings = resolveEffectiveLlmSettings(handle);
+      if (!settings.apiKey) {
+        throw new LlmRequestFailedError('LLM API key is not configured');
+      }
+      const result = streamText({
+        model: getChatModel({
+          baseUrl: settings.baseUrl,
+          model: settings.model,
+          apiKey: settings.apiKey,
+        }),
+        system,
+        messages: prompt,
+      });
+      return {
+        text: result.text,
+        toUimessageStream: () => result.toUIMessageStream(),
+      };
+    } catch (error) {
+      if (error instanceof LlmRequestFailedError) {
+        throw error;
+      }
+      // 配置缺失等同步失败也归一为 LLM_REQUEST_FAILED
+      throw new LlmRequestFailedError(error instanceof Error ? error.message : undefined);
+    }
+  };
+}
 
 /**
  * M3.4 编排（api-contract.md §13.5 流程 5–11）：
@@ -318,7 +335,7 @@ export async function runChatPipeline(
   handle: DbHandle,
   body: ChatRequestBody,
   now: string,
-  llmFactory: LlmStreamFactory = defaultLlmStreamFactory,
+  llmFactory?: LlmStreamFactory,
   emotionEngine: EmotionEngine = defaultEmotionEngine,
 ): Promise<ChatPipelineResult> {
   const persisted = persistUserMessage(handle, body, now);
@@ -341,7 +358,8 @@ export async function runChatPipeline(
 
   let llm: LlmStreamHandle;
   try {
-    llm = llmFactory(prompt);
+    const factory = llmFactory ?? createDefaultLlmStreamFactory(handle);
+    llm = factory(prompt);
   } catch (error) {
     writeAssistantMessage(handle, {
       conversationId: persisted.conversationId,
@@ -363,7 +381,6 @@ export async function runChatPipeline(
     llm,
   };
 }
-
 /** UI 流组装：状态事件 data part 先于文本增量（Phase 0 锁定顺序），结束后 assistant 落库。 */
 export function createChatResponse(
   handle: DbHandle,

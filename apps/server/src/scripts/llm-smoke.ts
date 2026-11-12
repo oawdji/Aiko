@@ -1,15 +1,16 @@
 import 'dotenv/config';
 import { streamText } from 'ai';
-import { getChatModel, getLlm } from '../llm/provider';
+import { loadLlmConfig } from '../config/llm';
+import { getChatModel } from '../llm/provider';
 
 async function main() {
-  const { config } = getLlm();
+  const config = loadLlmConfig();
   console.log(`LLM endpoint: ${config.baseUrl}`);
   console.log(`LLM model:    ${config.model}`);
   console.log('--- streaming output ---');
 
   const result = streamText({
-    model: getChatModel(),
+    model: getChatModel(config),
     prompt: '请用一句话友好地介绍你自己。',
   });
 

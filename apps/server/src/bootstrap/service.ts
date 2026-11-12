@@ -12,7 +12,8 @@ import {
   mapMessageRow,
   mapStateEventRow,
 } from '../db/mappers';
-import { agents, appSettings, conversations, messages, stateEvents } from '../db/schema';
+import { agents, conversations, messages, stateEvents } from '../db/schema';
+import { readAppSettings } from '../settings/service';
 
 /** Bootstrap 恢复的消息窗口，见 api-contract.md §7.5。 */
 export const BOOTSTRAP_MESSAGE_LIMIT = 30;
@@ -103,15 +104,3 @@ export function bootstrapAgent(handle: DbHandle, agentRef: string, now: string):
   });
 }
 
-/** 从 app_settings 键值表读取并组装 AppSettings（seed 保证键存在）。 */
-export function readAppSettings(handle: DbHandle) {
-  const rows = handle.db.select().from(appSettings).all();
-  const values = new Map(rows.map((row) => [row.key, JSON.parse(row.valueJson)]));
-
-  return BootstrapResponseSchema.shape.settings.parse({
-    defaultAgentId: values.get('default_agent_id'),
-    recentWindowRounds: values.get('recent_window_rounds'),
-    maxContextMessages: values.get('max_context_messages'),
-    theme: values.get('theme'),
-  });
-}
