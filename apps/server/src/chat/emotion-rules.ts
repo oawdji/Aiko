@@ -82,6 +82,7 @@ export function extractEmotion(text: string): EmotionExtraction | null {
     delta: {
       valence: Number(dValence.toFixed(4)),
       arousal: Number(dArousal.toFixed(4)),
+      dominance: 0,
     },
     confidence: Number(finalConfidence.toFixed(2)),
     evidenceText,
@@ -113,6 +114,7 @@ export function applyEmotion(
   const after: AgentEmotionState = {
     valence: clampState(current.valence + dValence),
     arousal: clampState(current.arousal + dArousal),
+    dominance: clampState(current.dominance),
   };
 
   return {
@@ -120,6 +122,7 @@ export function applyEmotion(
     delta: {
       valence: Number((after.valence - current.valence).toFixed(4)),
       arousal: Number((after.arousal - current.arousal).toFixed(4)),
+      dominance: Number((after.dominance - current.dominance).toFixed(4)),
     },
   };
 }

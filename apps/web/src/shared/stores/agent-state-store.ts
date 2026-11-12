@@ -17,7 +17,7 @@ export type AgentStateStore = Store<AgentStateStoreState> & {
   reset: () => void;
 };
 
-export const DEFAULT_AGENT_EMOTION: AgentEmotionState = { valence: 0, arousal: 0 };
+export const DEFAULT_AGENT_EMOTION: AgentEmotionState = { valence: 0, arousal: 0, dominance: 0 };
 
 /**
  * AgentStateStore（react-architecture.md §8.3）：

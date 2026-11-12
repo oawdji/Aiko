@@ -8,6 +8,7 @@ import {
 } from 'ai';
 import {
   LOCAL_USER_ID,
+  type AgentEmotionState,
   type ChatRequestBody,
 } from '@aiko/shared';
 import { getChatModel } from '../llm/provider';
@@ -60,9 +61,9 @@ export type PersistedUserMessage = {
 export type ChatStateEventData = {
   id: string;
   triggerMessageId: string;
-  before: { valence: number; arousal: number };
-  delta: { valence: number; arousal: number };
-  after: { valence: number; arousal: number };
+  before: AgentEmotionState;
+  delta: AgentEmotionState;
+  after: AgentEmotionState;
   discreteTag: string;
   reason: string;
   evidenceText: string;
@@ -197,7 +198,8 @@ export function applyStateEvent(
     throw new ChatAgentNotFoundError(params.agentId);
   }
 
-  const before = { valence: agent.currentValence, arousal: agent.currentArousal };
+  // dominance 快照待 T3 迁移 agents 表后接入，暂为 0
+  const before = { valence: agent.currentValence, arousal: agent.currentArousal, dominance: 0 };
   const { after, delta } = applyEmotion(before, params.extraction);
   const discreteTag = computeTag(after);
   const id = `state_${randomUUID()}`;

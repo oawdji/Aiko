@@ -9,9 +9,11 @@ const okBootstrap = {
     slug: 'default',
     displayName: 'Aiko',
     description: null,
-    currentState: { valence: 0, arousal: 0 },
+    currentState: { valence: 0, arousal: 0, dominance: 0 },
     currentTag: 'neutral',
     stateUpdatedAt: null,
+    emotionBaseline: { valence: 0, arousal: 0, dominance: 0 },
+    decayHalfLifeHours: 6,
     personaVersion: 1,
   },
   conversation: {

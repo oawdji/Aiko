@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { AgentEmotionStateSchema } from '../schemas/emotion';
 import {
   AppSettingsSchema,
   BootstrapResponseSchema,
@@ -27,9 +28,9 @@ const baseStateEvent = {
   triggerMessageId: 'msg_1',
   source: 'user_message',
   ruleVersion: 'emotion-rules-v1',
-  before: { valence: 0, arousal: 0 },
-  delta: { valence: -0.1, arousal: -0.04 },
-  after: { valence: -0.1, arousal: -0.04 },
+  before: { valence: 0, arousal: 0, dominance: 0 },
+  delta: { valence: -0.1, arousal: -0.04, dominance: 0 },
+  after: { valence: -0.1, arousal: -0.04, dominance: 0 },
   discreteTag: 'low',
   reason: '累',
   evidenceText: '累',
@@ -46,9 +47,11 @@ describe('api schemas (M2.1)', () => {
         slug: 'default',
         displayName: 'Aiko',
         description: null,
-        currentState: { valence: -0.1, arousal: -0.04 },
+        currentState: { valence: -0.1, arousal: -0.04, dominance: -0.02 },
         currentTag: 'low',
         stateUpdatedAt: '2026-11-11T08:30:00.000Z',
+        emotionBaseline: { valence: 0.05, arousal: -0.02, dominance: 0 },
+        decayHalfLifeHours: 6,
         personaVersion: 1,
       },
       conversation: {
@@ -73,6 +76,15 @@ describe('api schemas (M2.1)', () => {
     expect(BootstrapResponseSchema.safeParse(response).success).toBe(true);
   });
 
+  it('rejects emotion states with missing or out-of-range dominance', () => {
+    expect(
+      AgentEmotionStateSchema.safeParse({ valence: 0, arousal: 0, dominance: 2 }).success,
+    ).toBe(false);
+    expect(
+      AgentEmotionStateSchema.safeParse({ valence: 0, arousal: 0 }).success,
+    ).toBe(false);
+  });
+
   it('rejects message-triggered state events without triggerMessageId', () => {
     const result = BootstrapResponseSchema.safeParse({
       user: { id: 'local-user' },
@@ -81,9 +93,11 @@ describe('api schemas (M2.1)', () => {
         slug: 'default',
         displayName: 'Aiko',
         description: null,
-        currentState: { valence: 0, arousal: 0 },
+        currentState: { valence: 0, arousal: 0, dominance: 0 },
         currentTag: 'neutral',
         stateUpdatedAt: null,
+        emotionBaseline: { valence: 0, arousal: 0, dominance: 0 },
+        decayHalfLifeHours: 6,
         personaVersion: 1,
       },
       conversation: {
@@ -117,9 +131,11 @@ describe('api schemas (M2.1)', () => {
           slug: 's',
           displayName: 'A',
           description: null,
-          currentState: { valence: 0, arousal: 0 },
+          currentState: { valence: 0, arousal: 0, dominance: 0 },
           currentTag: 'neutral',
           stateUpdatedAt: null,
+          emotionBaseline: { valence: 0, arousal: 0, dominance: 0 },
+          decayHalfLifeHours: 6,
           personaVersion: 1,
         },
         conversation: {

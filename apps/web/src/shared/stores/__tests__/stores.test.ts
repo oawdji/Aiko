@@ -11,9 +11,11 @@ const bootstrapData = {
     slug: 'default',
     displayName: 'Aiko',
     description: null,
-    currentState: { valence: -0.1, arousal: -0.04 },
+    currentState: { valence: -0.1, arousal: -0.04, dominance: -0.02 },
     currentTag: 'low',
     stateUpdatedAt: '2026-11-12T00:00:00.000Z',
+    emotionBaseline: { valence: 0, arousal: 0, dominance: 0 },
+    decayHalfLifeHours: 6,
     personaVersion: 1,
   },
   conversation: {
@@ -43,9 +45,9 @@ function makeEvent(id: string): AgentStateEvent {
     triggerMessageId: 'msg_1',
     source: 'user_message',
     ruleVersion: 'emotion-rules-v1',
-    before: { valence: 0, arousal: 0 },
-    delta: { valence: -0.1, arousal: -0.04 },
-    after: { valence: -0.1, arousal: -0.04 },
+    before: { valence: 0, arousal: 0, dominance: 0 },
+    delta: { valence: -0.1, arousal: -0.04, dominance: 0 },
+    after: { valence: -0.1, arousal: -0.04, dominance: 0 },
     discreteTag: 'low',
     reason: '累',
     evidenceText: '累',
@@ -98,7 +100,7 @@ describe('agentStateStore', () => {
     agentStateStore.reset();
     agentStateStore.initFromBootstrap(bootstrapData);
     const state = agentStateStore.getState();
-    expect(state.state).toEqual({ valence: -0.1, arousal: -0.04 });
+    expect(state.state).toEqual({ valence: -0.1, arousal: -0.04, dominance: -0.02 });
     expect(state.discreteTag).toBe('low');
     expect(state.latestEvent).toBeNull();
     expect(state.receivedCount).toBe(0);

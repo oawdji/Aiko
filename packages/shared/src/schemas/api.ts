@@ -66,6 +66,10 @@ export const AgentDTOSchema = z.object({
   currentState: AgentEmotionStateSchema,
   currentTag: EmotionTagSchema,
   stateUpdatedAt: IsoDateTimeSchema.nullable(),
+  /** 角色气质基线 μ（只读，衰减回归目标，见 technical-design.md §10.11） */
+  emotionBaseline: AgentEmotionStateSchema,
+  /** 基线回归半程时间（小时，只读；null = 使用全局默认） */
+  decayHalfLifeHours: z.number().positive().nullable(),
   personaVersion: z.number().int().min(1),
 });
 
