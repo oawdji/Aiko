@@ -44,7 +44,7 @@
 | Agent 数量 | 当前一个默认 Agent，数据模型支持未来多 Agent |
 | 主动消息 | 仅浏览器页面打开期间，不做离线推送 |
 | MVP 记忆 | 只做近期对话窗口和消息持久化 |
-| MVP 状态 | 二维情感状态 + 状态事件 + 原因展示 |
+| MVP 状态 | PAD 三维情感状态 + OU 基线回归 + 状态事件 + 原因展示 |
 | MVP 人格 | 固定 `PERSONA_CORE`，不做演化 |
 
 ---
@@ -400,10 +400,13 @@ MVP 只存储纯文本。未来如需 reasoning、tool call 或图片，可新�
 | `rule_version` | text | 状态规则版本 |
 | `before_valence` | real | 变化前愉悦度 |
 | `before_arousal` | real | 变化前唤醒度 |
+| `before_dominance` | real | 变化前支配度 |
 | `delta_valence` | real | 愉悦度变化 |
 | `delta_arousal` | real | 唤醒度变化 |
+| `delta_dominance` | real | 支配度变化 |
 | `after_valence` | real | 变化后愉悦度 |
 | `after_arousal` | real | 变化后唤醒度 |
+| `after_dominance` | real | 变化后支配度 |
 | `discrete_tag` | text | 离散标签 |
 | `reason` | text | 面板展示原因 |
 | `evidence_text` | text | 触发证据 |
@@ -421,6 +424,8 @@ index(conversation_id, created_at)
 该唯一约束用于防止同一条消息重复累计状态。
 
 MVP 只实现 `user_message` 来源。`assistant_message` 和 `time_decay` 保留字段与枚举，不提前实现。
+
+时间衰减（基线回归）不产生 `time_decay` 事件：回归量折叠进下一条事件的 `before`，避免事件流噪声（见 §10.11）。`time_decay` 仅在未来需要定时批量落库时启用。
 
 ---
 
@@ -964,6 +969,8 @@ React AgentStateStore
 emotion-rules-v1
 ```
 
+emotion-rules-v2 将扩展为 PAD 三维词典（新增 `dDominance` 线索），见 §10.5 与 §10.11。历史事件保持 v1 结果，不重算。
+
 ---
 
 ## 10.4 否定处理
@@ -988,9 +995,12 @@ MVP 只处理简单否定：
 
 ## 10.5 状态更新公式
 
+emotion-rules-v2 起状态为 PAD 三维向量（valence/arousal/dominance，各维 [-1, 1]）。
+处理新消息前先做基线回归（OU 精确离散解，见 §10.11），再累加 delta：
+
 ```text
-new_valence = clamp(old_valence + delta_valence, -1, 1)
-new_arousal = clamp(old_arousal + delta_arousal, -1, 1)
+reverted = μ + (old − μ) · e^(−θ·Δt)        各维独立；|reverted − μ| < ε 时吸附到 μ
+new_x = clamp(reverted_x + delta_x, -1, 1)  x ∈ {valence, arousal, dominance}
 ```
 
 限制：
@@ -998,9 +1008,12 @@ new_arousal = clamp(old_arousal + delta_arousal, -1, 1)
 ```text
 单条用户消息 abs(delta_valence) <= 0.30
 单条用户消息 abs(delta_arousal) <= 0.30
+单条用户消息 abs(delta_dominance) <= 0.30
 ```
 
 如果规则计算结果超过限制，则截断。
+
+事件中的 `before` 存回归后的值（reverted），保证事件链可复现（before + delta = after）。
 
 ---
 
@@ -1056,7 +1069,8 @@ TAG_THRESHOLD = 0.05
 2. 使用固定阈值 `0.05`，不做浮点容差，保证结果确定；
 3. 分类实现为纯函数：输入 `AgentEmotionState`，输出 `EmotionTag`；
 4. 该映射同时用于 `state_events.discrete_tag` 与 `agents.current_tag`；
-5. 修改阈值或分区即产生新的 `rule_version`，历史事件中的标签不重算。
+5. 修改阈值或分区即产生新的 `rule_version`，历史事件中的标签不重算；
+6. dominance 维度不参与标签分区，仅用于展示与 prompt 注入。
 
 示例：
 
@@ -1108,12 +1122,51 @@ trigger_message_id + source + rule_version
 页面刷新时：
 
 1. 调用 `/api/bootstrap`；
-2. 读取 `agents.current_valence` 与 `current_arousal`；
+2. 读取 `agents` 快照（valence/arousal/dominance）与角色衰减参数；
 3. 读取最新 `state_events`；
 4. 初始化 `AgentStateStore`；
-5. 渲染状态面板。
+5. 渲染状态面板（快照先经 §10.11 读时回归，不写库）。
 
 不依赖 localStorage 保存状态。
+
+---
+
+## 10.11 基线回归（时间衰减引擎）
+
+### 目标
+
+情绪状态不永久保持：随时间向角色气质基线 μ 回归（OU 过程精确离散解），回归速率 θ 为角色级参数。
+
+### 公式
+
+```text
+x' = μ + (x − μ) · e^(−θ·Δt)
+```
+
+- θ 由 `agents.decay_half_life_hours`（半程时间，t½ = ln2 / θ）派生；该列为 NULL 时使用全局默认（环境变量 `EMOTION_DECAY_HALF_LIFE_HOURS`，缺省 6 小时）；
+- Δt = 处理时刻 − `agents.state_updated_at`（UTC，小时）；
+- ε = 0.001：|x − μ| < ε 时吸附到 μ，截断长尾；
+- 三维独立计算，公式一致。
+
+### 参数（角色级）
+
+| 参数 | 存储 | 说明 |
+|---|---|---|
+| 基线 μ | `agents.baseline_valence` / `baseline_arousal` / `baseline_dominance` | 角色气质偏移，创建 Agent 时设定 |
+| 半程时间 | `agents.decay_half_life_hours`（可空） | 到基线的半程时间；NULL = 使用全局默认 |
+| 吸附阈值 ε | 代码常量 | 0.001 |
+
+### 计算时机
+
+- 新状态事件处理前：先回归再叠加 delta（§10.5），`before` 存回归后的值；
+- bootstrap / state 读取时：对快照做读时回归用于展示，不写库；
+- 不生成 `time_decay` 事件；枚举保留给未来定时批量落库方案。
+
+### 确定性与幂等
+
+- 核心实现为纯函数，`now` 显式注入（禁止直接读系统时钟），可复现、可测试；
+- 回归量折叠进下一条事件，事件链满足 before + delta = after，幂等约束不变；
+- emotion-rules-v1 历史事件的 `after` 值不重算。
 
 ---
 
@@ -1552,9 +1605,10 @@ error_code
 
 任务：
 
-- 实现情感词典；
+- 实现情感词典（PAD 三维，emotion-rules-v2）；
 - 实现否定处理；
 - 实现状态更新；
+- 实现基线回归（时间衰减），衰减速率与基线为角色参数；
 - 写入 `state_events`;
 - 更新 Agent 快照；
 - 在流中返回状态事件。
@@ -1563,6 +1617,7 @@ error_code
 
 - 状态变化方向符合规则；
 - 原因可展示；
+- 隔夜后状态向角色基线回归；
 - 同一消息不重复累计；
 - 状态刷新后可恢复。
 

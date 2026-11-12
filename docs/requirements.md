@@ -253,7 +253,7 @@ MVP 不强制引入虚拟列表。
 
 ## 5.2 状态系统
 
-### F5. 二维情感状态
+### F5. PAD 三维情感状态
 
 **优先级：MVP 必须**
 
@@ -261,17 +261,20 @@ MVP 不强制引入虚拟列表。
 
 ```ts
 type AgentEmotionState = {
-  valence: number; // 愉悦度，-1 到 1
-  arousal: number; // 唤醒度，-1 到 1
+  valence: number;   // 愉悦度，-1 到 1
+  arousal: number;   // 唤醒度，-1 到 1
+  dominance: number; // 支配度，-1 到 1
 };
 ```
 
-MVP 状态更新规则：
+状态更新规则：
 
 1. 对用户消息进行情绪线索抽取；
 2. 依据规则计算变化量；
-3. MVP 仅累加变化量并 clamp 到 [-1, 1]；惯性与时间衰减延后至 Level 1；
+3. 每轮先做基线回归（OU 精确离散解：x' = μ + (x − μ)·e^(−θ·Δt)，ε 吸附），再累加变化量并 clamp 到 [-1, 1]；
 4. 输出状态事件。
+
+回归速率（半程时间）与基线 μ 为角色级参数：存于 `agents` 表，API 只读暴露；全局默认值由环境变量兜底。
 
 MVP 可使用关键词词典 + 规则实现，但接口设计必须允许后续替换为 LLM 结构化抽取。
 
@@ -285,6 +288,7 @@ MVP 可使用关键词词典 + 规则实现，但接口设计必须允许后续�
 type EmotionExtraction = {
   valenceDelta: number;
   arousalDelta: number;
+  dominanceDelta: number;
   evidenceText: string;
   confidence: number;
   source:
@@ -297,7 +301,7 @@ type EmotionExtraction = {
 
 要求：
 
-- `valenceDelta` 与 `arousalDelta` 范围由后端统一限制；
+- `valenceDelta`、`arousalDelta` 与 `dominanceDelta` 范围由后端统一限制；
 - `confidence` 范围为 0 到 1；
 - `evidenceText` 来自实际消息或系统规则；
 - 低置信度事件可以记录，但不应产生大幅状态变化。

@@ -215,6 +215,7 @@ packages/shared/src/types
 export type AgentEmotionState = {
   valence: number;
   arousal: number;
+  dominance: number;
 };
 ```
 
@@ -223,6 +224,7 @@ export type AgentEmotionState = {
 ```text
 -1 <= valence <= 1
 -1 <= arousal <= 1
+-1 <= dominance <= 1
 ```
 
 ---
@@ -331,6 +333,10 @@ export type AgentDTO = {
   currentState: AgentEmotionState;
   currentTag: EmotionTag;
   stateUpdatedAt: string | null;
+  /** 角色气质基线 μ（只读，衰减回归目标） */
+  emotionBaseline: AgentEmotionState;
+  /** 基线回归半程时间（小时，只读；null = 使用全局默认） */
+  decayHalfLifeHours: number | null;
   personaVersion: number;
 };
 ```
@@ -542,10 +548,17 @@ export type BootstrapResponse = {
     "description": null,
     "currentState": {
       "valence": -0.1,
-      "arousal": -0.04
+      "arousal": -0.04,
+      "dominance": -0.02
     },
     "currentTag": "low",
     "stateUpdatedAt": "2026-11-11T08:30:00.000Z",
+    "emotionBaseline": {
+      "valence": 0.05,
+      "arousal": -0.02,
+      "dominance": 0
+    },
+    "decayHalfLifeHours": 6,
     "personaVersion": 1
   },
   "conversation": {
@@ -575,18 +588,21 @@ export type BootstrapResponse = {
     "conversationId": "conv_018f6d2e-8fb4-7a1e-9f0f-4c1f7a9d0002",
     "triggerMessageId": "msg_018f6d2e-8fb4-7a1e-9f0f-4c1f7a9d0001",
     "source": "user_message",
-    "ruleVersion": "emotion-rules-v1",
+    "ruleVersion": "emotion-rules-v2",
     "before": {
-      "valence": 0,
-      "arousal": 0
+      "valence": 0.03,
+      "arousal": 0.01,
+      "dominance": 0
     },
     "delta": {
       "valence": -0.1,
-      "arousal": -0.04
+      "arousal": -0.04,
+      "dominance": 0
     },
     "after": {
-      "valence": -0.1,
-      "arousal": -0.04
+      "valence": -0.07,
+      "arousal": -0.03,
+      "dominance": 0
     },
     "discreteTag": "low",
     "reason": "你提到“累”，她的愉悦度略有下降。",
@@ -713,7 +729,8 @@ export type AgentStateResponse = {
   "agentId": "agent-default",
   "state": {
     "valence": 0.12,
-    "arousal": 0.08
+    "arousal": 0.08,
+    "dominance": 0.1
   },
   "discreteTag": "happy",
   "stateUpdatedAt": "2026-11-11T08:30:00.000Z"
@@ -994,18 +1011,21 @@ export type AgentStateEventData = {
       "conversationId": "conv_018f6d2e-8fb4-7a1e-9f0f-4c1f7a9d0002",
       "triggerMessageId": "msg_018f6d2e-8fb4-7a1e-9f0f-4c1f7a9d0001",
       "source": "user_message",
-      "ruleVersion": "emotion-rules-v1",
+      "ruleVersion": "emotion-rules-v2",
       "before": {
-        "valence": 0,
-        "arousal": 0
+        "valence": 0.03,
+        "arousal": 0.01,
+        "dominance": 0
       },
       "delta": {
         "valence": -0.1,
-        "arousal": -0.04
+        "arousal": -0.04,
+        "dominance": 0
       },
       "after": {
-        "valence": -0.1,
-        "arousal": -0.04
+        "valence": -0.07,
+        "arousal": -0.03,
+        "dominance": 0
       },
       "discreteTag": "low",
       "reason": "你提到“累”，她的愉悦度略有下降。",

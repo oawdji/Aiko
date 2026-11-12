@@ -228,6 +228,11 @@ is_active
 | `description` | `TEXT` | 可空 | Agent 简介 |
 | `current_valence` | `REAL` | `NOT NULL`，范围 -1 到 1 | 当前愉悦度快照 |
 | `current_arousal` | `REAL` | `NOT NULL`，范围 -1 到 1 | 当前唤醒度快照 |
+| `current_dominance` | `REAL` | `NOT NULL`，范围 -1 到 1 | 当前支配度快照 |
+| `baseline_valence` | `REAL` | `NOT NULL`，范围 -1 到 1 | 气质基线 μ（愉悦度） |
+| `baseline_arousal` | `REAL` | `NOT NULL`，范围 -1 到 1 | 气质基线 μ（唤醒度） |
+| `baseline_dominance` | `REAL` | `NOT NULL`，范围 -1 到 1 | 气质基线 μ（支配度） |
+| `decay_half_life_hours` | `REAL` | 可空，> 0 | 基线回归半程时间 t½（小时）；NULL = 使用全局默认 |
 | `current_tag` | `TEXT` | `NOT NULL` | 当前离散情感标签 |
 | `state_updated_at` | `TEXT` | 可空 | 状态快照更新时间 |
 | `active_persona_version` | `INTEGER` | `NOT NULL` | 当前人格版本号 |
@@ -274,6 +279,24 @@ CREATE TABLE agents (
   current_arousal REAL NOT NULL CHECK (
     current_arousal >= -1 AND current_arousal <= 1
   ),
+
+  current_dominance REAL NOT NULL CHECK (
+    current_dominance >= -1 AND current_dominance <= 1
+  ),
+
+  baseline_valence REAL NOT NULL CHECK (
+    baseline_valence >= -1 AND baseline_valence <= 1
+  ),
+
+  baseline_arousal REAL NOT NULL CHECK (
+    baseline_arousal >= -1 AND baseline_arousal <= 1
+  ),
+
+  baseline_dominance REAL NOT NULL CHECK (
+    baseline_dominance >= -1 AND baseline_dominance <= 1
+  ),
+
+  decay_half_life_hours REAL CHECK (decay_half_life_hours > 0),
 
   current_tag TEXT NOT NULL CHECK (
     current_tag IN (
@@ -568,10 +591,13 @@ failed → complete
 | `rule_version` | `TEXT` | `NOT NULL` | 状态规则版本 |
 | `before_valence` | `REAL` | `NOT NULL` | 变化前愉悦度 |
 | `before_arousal` | `REAL` | `NOT NULL` | 变化前唤醒度 |
+| `before_dominance` | `REAL` | `NOT NULL` | 变化前支配度 |
 | `delta_valence` | `REAL` | `NOT NULL` | 愉悦度变化 |
 | `delta_arousal` | `REAL` | `NOT NULL` | 唤醒度变化 |
+| `delta_dominance` | `REAL` | `NOT NULL` | 支配度变化 |
 | `after_valence` | `REAL` | `NOT NULL` | 变化后愉悦度 |
 | `after_arousal` | `REAL` | `NOT NULL` | 变化后唤醒度 |
+| `after_dominance` | `REAL` | `NOT NULL` | 变化后支配度 |
 | `discrete_tag` | `TEXT` | `NOT NULL` | 离散情感标签 |
 | `reason` | `TEXT` | `NOT NULL` | UI 展示原因 |
 | `evidence_text` | `TEXT` | `NOT NULL` | 触发证据 |
@@ -602,7 +628,9 @@ user_message
 ```text
 before_valence / after_valence: -1 到 1
 before_arousal / after_arousal: -1 到 1
+before_dominance / after_dominance: -1 到 1
 delta_valence / delta_arousal: -1 到 1
+delta_dominance: -1 到 1
 confidence: 0 到 1
 ```
 
@@ -664,6 +692,10 @@ CREATE TABLE state_events (
     before_arousal >= -1 AND before_arousal <= 1
   ),
 
+  before_dominance REAL NOT NULL CHECK (
+    before_dominance >= -1 AND before_dominance <= 1
+  ),
+
   delta_valence REAL NOT NULL CHECK (
     delta_valence >= -1 AND delta_valence <= 1
   ),
@@ -672,12 +704,20 @@ CREATE TABLE state_events (
     delta_arousal >= -1 AND delta_arousal <= 1
   ),
 
+  delta_dominance REAL NOT NULL CHECK (
+    delta_dominance >= -1 AND delta_dominance <= 1
+  ),
+
   after_valence REAL NOT NULL CHECK (
     after_valence >= -1 AND after_valence <= 1
   ),
 
   after_arousal REAL NOT NULL CHECK (
     after_arousal >= -1 AND after_arousal <= 1
+  ),
+
+  after_dominance REAL NOT NULL CHECK (
+    after_dominance >= -1 AND after_dominance <= 1
   ),
 
   discrete_tag TEXT NOT NULL CHECK (
