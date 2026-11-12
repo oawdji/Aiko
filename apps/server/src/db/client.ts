@@ -3,8 +3,9 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import * as schema from './schema';
 
-export type Db = BetterSQLite3Database;
+export type Db = BetterSQLite3Database<typeof schema>;
 
 export type DbHandle = {
   sqlite: Database.Database;
@@ -28,7 +29,7 @@ export function createDb(databasePath: string): DbHandle {
   sqlite.pragma('journal_mode = WAL');
   sqlite.pragma('busy_timeout = 5000');
 
-  const db = drizzle(sqlite);
+  const db = drizzle(sqlite, { schema });
 
   return { sqlite, db, databasePath };
 }
