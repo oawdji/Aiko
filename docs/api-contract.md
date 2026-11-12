@@ -1025,9 +1025,18 @@ export type AgentStateEventData = {
 > 4. 写入顺序可控：先写 data part 再写 text-delta，前端按相同顺序接收；
 > 5. 服务端 `createUIMessageStream` 返回 `ReadableStream`，需用 `createUIMessageStreamResponse({ stream })` 构造响应；
 > 6. 前端通过 `useChat` 的 `message.parts` 读取数据 part（`type === 'data-agent-state-event'`），`stop()` 中断流可用；
-> 7. 以上结论经 mock 端点、单元测试与浏览器验证；DeepSeek 真实端点行为待 API Key 配置后补充验证。
+> 7. 以上结论经 mock 端点、单元测试与浏览器验证；DeepSeek 真实端点行为已于 2026-11-12 经 M3 冒烟实测补充确认（见下）。
 >
 > 前端不得解析底层 chunk，只能通过 SDK 暴露的 message parts 或官方 adapter 读取。
+> **M3 真实链路实测记录**（2026-11-12，DeepSeek `https://api.deepseek.com` + `deepseek-chat`，Key 经设置面板写入 `app_settings`）：
+>
+> 1. **流式输出**：200 + `text/event-stream`，文本增量经 `DefaultChatTransport` 正常接收。期间发现并修复：AI SDK 标准 payload（`{id, messages, trigger, messageId}`）与 §13.1 扁平契约体不一致，需在 `prepareSendMessagesRequest` 中映射（`clientMessageId` 取 AI SDK 消息 id，天然满足 §14 幂等语义）；
+> 2. **刷新恢复顺序**：发现并修复同毫秒消息乱序——一轮对话 user/assistant 曾共用同一 `createdAt` 且 tie-break 为随机 UUID id；现 assistant 落库使用完成时刻时间戳，bootstrap/会话分页 tie-break 改为 `rowid`（插入序），并有回归测试锁定；
+> 3. **情绪状态事件**：含情绪词消息触发 data part 先于文本到达，状态面板同步更新；`EMOTION_ENGINE=off` 可整体关闭（不产生事件、不更新快照）；
+> 4. **多轮上下文**：追问可正确引用前文（DB 近期窗口 30 条）；
+> 5. **停止生成**：中断可用，失败占位按 §15 落库；
+> 6. **幂等（§14）**：同一 `clientMessageId` 二次提交实测返回 `409 DUPLICATE_CLIENT_MESSAGE` + `details.existingMessageId`，库内仅一条 user 消息；409 后前端经 `GET /api/conversations/:id` 刷新，不重试同一 id；
+> 7. **LLM 设置接口（§11/§12/§12.6）**：GET 掩码回显（`****后四位`，任何响应不回显完整 Key）、PATCH 热生效（无需重启）、`llm/test` 真实连通性测试均实测通过。
 
 ## 13.8 无状态变化时
 
