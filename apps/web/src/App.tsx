@@ -1,68 +1,58 @@
-import { DEFAULT_AGENT_ID } from '@aiko/shared';
-import { MessageComposer } from './chat/components/MessageComposer';
-import { MessageList } from './chat/components/MessageList';
-import { RESTORED_MESSAGES } from './chat/fixtures/restored-messages';
-import { useRestoredChat } from './chat/hooks/useRestoredChat';
-import { extractStateEvents } from './chat/utils/extract-state-events';
-import { DevChecklist } from './app/DevChecklist';
-import { StatusPanel } from './status/components/StatusPanel';
-import { ErrorNotice } from './shared/components/ErrorNotice';
-import { useServerHealth } from './shared/hooks/useServerHealth';
+import { DEFAULT_AGENT_SLUG } from '@aiko/shared';
+import { ChatView } from './app/ChatView';
+import { useBootstrap } from './app/use-bootstrap';
 
+/**
+ * App 只做启动状态机渲染（react-architecture.md §10.3）：
+ * loading → 全页加载；error → 全页错误（无聊天输入框）；ready → ChatView。
+ * 聊天与状态面板的全部细节下沉到 ChatView 与 store。
+ */
 export default function App() {
-  const serverStatus = useServerHealth();
+  const boot = useBootstrap();
 
-  const { messages, sendMessage, status, stop, error } = useRestoredChat(
-    RESTORED_MESSAGES,
-  );
-  const stateEvents = extractStateEvents(messages);
-  const latestEvent = stateEvents.at(-1) ?? null;
-  const isBusy = status === 'submitted' || status === 'streaming';
-
-  return (
-    <main className="mx-auto flex min-h-screen max-w-5xl flex-col gap-4 bg-neutral-950 p-6 text-neutral-100 lg:flex-row">
-      <section className="flex min-w-0 flex-1 flex-col gap-3">
-        <header className="space-y-1 text-center">
-          <h1 className="text-2xl font-semibold">Aiko</h1>
-          <p className="text-sm text-neutral-400">
-            T0.5 · 冒烟验证（mock，无需 LLM Key）
-          </p>
-          <p className="text-xs text-neutral-500">
-            后端：
-            {serverStatus === 'checking' && '检测中…'}
-            {serverStatus === 'ok' && (
-              <span className="text-emerald-400">已连接</span>
-            )}
-            {serverStatus === 'error' && (
-              <span className="text-red-400">未连接</span>
-            )}
-            {' · '}
-            Agent: {DEFAULT_AGENT_ID}
-          </p>
-        </header>
-
-        <MessageList messages={messages} />
-
-        {status === 'error' && (
-          <ErrorNotice
-            message={error instanceof Error ? error.message : String(error ?? '未知错误')}
-            hint="409 验证：发送包含“409”的消息触发"
+  if (boot.status === 'loading') {
+    return (
+      <main
+        aria-label="启动中"
+        className="flex min-h-screen items-center justify-center bg-neutral-950 text-neutral-300"
+      >
+        <div className="flex flex-col items-center gap-3">
+          <div
+            aria-hidden
+            className="h-8 w-8 animate-spin rounded-full border-2 border-neutral-700 border-t-sky-400"
           />
-        )}
+          <p className="text-sm">正在恢复会话…</p>
+        </div>
+      </main>
+    );
+  }
 
-        <MessageComposer
-          onSend={(text) => {
-            void sendMessage({ text });
-          }}
-          onStop={stop}
-          isBusy={isBusy}
-        />
-      </section>
+  if (boot.status === 'error') {
+    return (
+      <main
+        aria-label="启动失败"
+        className="flex min-h-screen items-center justify-center bg-neutral-950 p-6 text-neutral-200"
+      >
+        <div className="w-full max-w-md space-y-4 rounded-xl border border-neutral-800 bg-neutral-900 p-6 text-center">
+          <h1 className="text-lg font-semibold">会话恢复失败</h1>
+          <p className="text-xs text-neutral-500">错误码：{boot.errorCode}</p>
+          <p className="text-sm text-neutral-400">
+            没有恢复会话前无法安全发送消息。
+          </p>
+          <button
+            type="button"
+            onClick={boot.retry}
+            className="rounded-lg bg-sky-500 px-4 py-2 text-sm font-medium text-neutral-950 hover:bg-sky-400"
+          >
+            重试
+          </button>
+          <p className="text-xs text-neutral-600">
+            Agent: {DEFAULT_AGENT_SLUG} · 请确认本地服务已启动（127.0.0.1:8787）
+          </p>
+        </div>
+      </main>
+    );
+  }
 
-      <aside className="w-full shrink-0 space-y-3 lg:w-80">
-        <StatusPanel latestEvent={latestEvent} receivedCount={stateEvents.length} />
-        <DevChecklist />
-      </aside>
-    </main>
-  );
+  return <ChatView bootstrap={boot.data} />;
 }
