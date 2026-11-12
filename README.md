@@ -7,7 +7,7 @@
 Aiko 是一个运行在本地的拟人化聊天 Agent。她不是“带聊天框的工具”，而是一个连续存在的对话角色：
 
 - **稳定人格**：人格锚点（PERSONA_CORE）版本化管理，不可被聊天内容或 Prompt 注入篡改；
-- **可感知状态**：二维情绪模型（愉悦度 valence / 唤醒度 arousal），每次变化都有原因、证据与事件记录；
+- **可感知状态**：PAD 三维情绪模型（愉悦度 valence / 唤醒度 arousal / 支配度 dominance），每轮先向角色气质基线回归（OU 时间衰减），再叠加事件增量；每次变化都有原因、证据与事件记录；
 - **长期记忆**（规划中）：事实记忆、摘要与语义检索，全部对用户透明、可修正、可删除；
 - **受控演化**（规划中）：人格调整必须经过“提案 → diff → 用户确认”流程；
 - **本地优先**：数据保存在本机 SQLite，不做云端同步，暂不实现登录与多用户。
@@ -21,7 +21,7 @@ Aiko 是一个运行在本地的拟人化聊天 Agent。她不是“带聊天框
 | 文档设计 | 需求 / 技术设计 / API 契约 / 数据库 / React 架构 / 人格锚点 / LLM 连接设置 | ✅ 完成 |
 | Phase 0 | 项目骨架、LLM 层、流式协议、恢复注入、上下文窗口 | ✅ 完成（DeepSeek 已实测确认） |
 | Phase 1（MVP） | 消息持久化、会话恢复、状态引擎 | ✅ M1 / M2 / M3 完成，六项冒烟全过 |
-| M4（下一里程碑） | 时间衰减、情绪面板打磨 | ⬜ 待开始 |
+| M4 | PAD 三维情绪、OU 时间衰减引擎、角色级衰减参数、prompt 情绪注入 | ✅ 后端完成；情绪面板打磨（T7）进行中 |
 | Phase 2 | 长期记忆与透明性 | ⬜ 未开始 |
 | Phase 3 | 语义检索与受控人格演化 | ⬜ 未开始 |
 | Phase 4 | 主动行为与遗忘 | ⬜ 未开始 |
@@ -29,7 +29,7 @@ Aiko 是一个运行在本地的拟人化聊天 Agent。她不是“带聊天框
 ## 功能一览
 
 - **真实流式对话**：OpenAI 兼容端点（默认 DeepSeek），UIMessage Stream 协议；
-- **情绪引擎**：11 词词典规则（`emotion-rules-v1`），否定跳过、±0.3 截断、7 分区离散标签；每个状态变化落库为带版本号的事件，证据与原因可追溯；环境变量 `EMOTION_ENGINE=off` 可整体关闭；
+- **情绪引擎**：PAD 三维词典规则（`emotion-rules-v2`，15 条线索），否定跳过、±0.3 截断、7 分区离散标签；OU 基线回归让情绪随时间回归角色气质基线（角色级半衰期参数，全局默认 6 小时）；每个状态变化落库为带版本号的事件，证据与原因可追溯；当前情绪会注入 system prompt；环境变量 `EMOTION_ENGINE=off` 可整体关闭；
 - **会话恢复**：刷新后自动恢复最近会话与最近 30 条消息，消息顺序严格按插入序（同毫秒 `rowid` 兜底）；
 - **幂等提交**：`clientMessageId` 唯一约束，重复提交返回 409 并自动刷新会话；
 - **LLM 设置面板**：页面右上角 ⚙ 打开，Base URL / 模型 / API Key 页面内填写，保存后热生效无需重启；Key 只写不读，任何响应仅回显掩码后四位；
@@ -44,7 +44,7 @@ Aiko 是一个运行在本地的拟人化聊天 Agent。她不是“带聊天框
 聊天协议：Vercel AI SDK v7（UIMessage Stream，已锁定 ai@7.0.166 / @ai-sdk/react@4.0.170）
 状态管理：自研轻量 store（createStore + useSyncExternalStore，无外部状态库）
 工程：pnpm workspace monorepo
-测试：Vitest（当前 145 个用例全绿）
+测试：Vitest 5.1（workspace 统一版本，当前 165 个用例全绿）
 ```
 
 ## 文档导航
@@ -75,7 +75,7 @@ Aiko 是一个运行在本地的拟人化聊天 Agent。她不是“带聊天框
 │     └─ src/
 │        ├─ api/               # /api/health、/api/dev/mock-chat（仅开发环境）
 │        ├─ bootstrap/         # 会话恢复服务
-│        ├─ chat/              # 聊天编排 / 情绪规则引擎 / 引擎开关
+│        ├─ chat/              # 聊天编排 / 情绪词典与规则 / OU 衰减引擎 / prompt 情绪注入 / 引擎开关
 │        ├─ conversations/     # 会话详情与分页
 │        ├─ settings/          # LLM 设置服务与路由（DB 优先，热生效）
 │        ├─ llm/               # OpenAI 兼容 Provider（按配置键缓存）
@@ -101,7 +101,7 @@ pnpm dev
 pnpm dev:server
 pnpm dev:web
 
-pnpm test          # 全部测试（145 个）
+pnpm test          # 全部测试（165 个）
 pnpm lint          # ESLint
 pnpm gen:persona   # 从 docs/persona-core-v1.md 重新生成锚点模块
 ```
