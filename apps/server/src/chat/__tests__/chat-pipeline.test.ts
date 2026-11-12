@@ -129,6 +129,22 @@ describe('chat pipeline (M3.4)', () => {
     expect(failedCount.n).toBeGreaterThanOrEqual(1);
   });
 
+  it('emotion engine off: no state event and agent snapshot unchanged', async () => {
+    const before = handle.db.select().from(agents).where(eq(agents.id, DEFAULT_AGENT_ID)).get()!;
+    const body = { ...baseBody, message: '今天好累', clientMessageId: 'client_pipe_off' };
+    const pipeline = await runChatPipeline(handle, body, NOW, () => fakeLlm('好的'), () => null);
+    expect(pipeline.stateEvent).toBeNull();
+
+    const response = createChatResponse(handle, pipeline, NOW);
+    const sse = await readSse(response);
+    expect(sse).not.toContain('data-agent-state-event');
+    expect(sse).toContain('好的');
+
+    const after = handle.db.select().from(agents).where(eq(agents.id, DEFAULT_AGENT_ID)).get()!;
+    expect(after.currentValence).toBe(before.currentValence);
+    expect(after.currentArousal).toBe(before.currentArousal);
+    expect(after.currentTag).toBe(before.currentTag);
+  });
   it('marks assistant failed when stream text rejects', async () => {
     const body = { ...baseBody, message: '平静', clientMessageId: 'client_pipe_4' };
     const stream = createUIMessageStream({

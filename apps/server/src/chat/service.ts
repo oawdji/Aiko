@@ -15,12 +15,8 @@ import type { DbHandle } from '../db/client';
 import { PERSONA_CORE_MD } from '../db/generated/persona-core';
 import { agents, conversations, messages, stateEvents } from '../db/schema';
 import { type PromptMessage } from './recent-window';
-import {
-  EMOTION_RULES_VERSION,
-  applyEmotion,
-  computeTag,
-  extractEmotion,
-} from './emotion-rules';
+import { EMOTION_RULES_VERSION, applyEmotion, computeTag, type EmotionExtraction } from './emotion-rules';
+import { defaultEmotionEngine, type EmotionEngine } from './emotion-engine';
 
 export class ChatAgentNotFoundError extends Error {
   constructor(agentRef: string) {
@@ -189,7 +185,7 @@ export function applyStateEvent(
     agentId: string;
     conversationId: string;
     triggerMessageId: string;
-    extraction: NonNullable<ReturnType<typeof extractEmotion>>;
+    extraction: EmotionExtraction;
     now: string;
   },
 ): ChatStateEventData {
@@ -323,10 +319,11 @@ export async function runChatPipeline(
   body: ChatRequestBody,
   now: string,
   llmFactory: LlmStreamFactory = defaultLlmStreamFactory,
+  emotionEngine: EmotionEngine = defaultEmotionEngine,
 ): Promise<ChatPipelineResult> {
   const persisted = persistUserMessage(handle, body, now);
 
-  const extraction = extractEmotion(body.message);
+  const extraction = emotionEngine(body.message);
   const stateEvent = extraction
     ? applyStateEvent(handle, {
         agentId: persisted.agentId,
@@ -429,10 +426,11 @@ export async function handleChatRequest(
   deps: {
     body: ChatRequestBody;
     llmFactory?: LlmStreamFactory;
+    emotionEngine?: EmotionEngine;
   },
   handle: DbHandle,
   now: string,
 ): Promise<Response> {
-  const pipeline = await runChatPipeline(handle, deps.body, now, deps.llmFactory);
+  const pipeline = await runChatPipeline(handle, deps.body, now, deps.llmFactory, deps.emotionEngine);
   return createChatResponse(handle, pipeline, now);
 }
