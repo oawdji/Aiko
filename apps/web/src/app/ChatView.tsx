@@ -3,7 +3,7 @@ import { DEFAULT_AGENT_ID } from '@aiko/shared';
 import type { BootstrapResponse } from '@aiko/shared';
 import { MessageComposer } from '../chat/components/MessageComposer';
 import { MessageList } from '../chat/components/MessageList';
-import { useRestoredChat } from '../chat/hooks/useRestoredChat';
+import { useAgentChat } from '../chat/hooks/use-agent-chat';
 import { extractStateEvents } from '../chat/utils/extract-state-events';
 import { DevChecklist } from './DevChecklist';
 import { StatusPanel } from '../status/components/StatusPanel';
@@ -19,7 +19,7 @@ import { agentStateStore } from '../shared/stores/agent-state-store';
  */
 export function ChatView({ bootstrap }: { bootstrap: BootstrapResponse }) {
   const serverStatus = useServerHealth();
-  const { messages, sendMessage, status, stop, error } = useRestoredChat(
+  const { messages, sendMessage, status, stop, error } = useAgentChat(
     bootstrap.messages,
   );
 
