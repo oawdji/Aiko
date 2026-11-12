@@ -198,8 +198,11 @@ export function applyStateEvent(
     throw new ChatAgentNotFoundError(params.agentId);
   }
 
-  // dominance 快照待 T3 迁移 agents 表后接入，暂为 0
-  const before = { valence: agent.currentValence, arousal: agent.currentArousal, dominance: 0 };
+  const before = {
+    valence: agent.currentValence,
+    arousal: agent.currentArousal,
+    dominance: agent.currentDominance,
+  };
   const { after, delta } = applyEmotion(before, params.extraction);
   const discreteTag = computeTag(after);
   const id = `state_${randomUUID()}`;

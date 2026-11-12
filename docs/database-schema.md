@@ -692,7 +692,7 @@ CREATE TABLE state_events (
     before_arousal >= -1 AND before_arousal <= 1
   ),
 
-  before_dominance REAL NOT NULL CHECK (
+  before_dominance REAL DEFAULT 0 NOT NULL CHECK (
     before_dominance >= -1 AND before_dominance <= 1
   ),
 
@@ -704,7 +704,7 @@ CREATE TABLE state_events (
     delta_arousal >= -1 AND delta_arousal <= 1
   ),
 
-  delta_dominance REAL NOT NULL CHECK (
+  delta_dominance REAL DEFAULT 0 NOT NULL CHECK (
     delta_dominance >= -1 AND delta_dominance <= 1
   ),
 
@@ -716,7 +716,7 @@ CREATE TABLE state_events (
     after_arousal >= -1 AND after_arousal <= 1
   ),
 
-  after_dominance REAL NOT NULL CHECK (
+  after_dominance REAL DEFAULT 0 NOT NULL CHECK (
     after_dominance >= -1 AND after_dominance <= 1
   ),
 

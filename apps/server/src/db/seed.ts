@@ -45,6 +45,12 @@ export function seedDefaultData(handle: DbHandle, now: string): void {
           description: null,
           currentValence: 0,
           currentArousal: 0,
+          currentDominance: 0,
+          baselineValence: 0,
+          baselineArousal: 0,
+          baselineDominance: 0,
+          // NULL = 使用全局默认衰减速率（technical-design.md §10.11）
+          decayHalfLifeHours: null,
           currentTag: 'neutral',
           stateUpdatedAt: null,
           activePersonaVersion: DEFAULT_PERSONA_VERSION,

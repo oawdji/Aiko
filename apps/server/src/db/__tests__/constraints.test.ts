@@ -249,6 +249,50 @@ describe('database constraints (M1.6)', () => {
     handle.sqlite.close();
   });
 
+  it('rejects out-of-range dominance on agents', () => {
+    const handle = freshDb();
+    expect(() =>
+      handle.sqlite.prepare('UPDATE agents SET current_dominance = 1.5 WHERE id = ?').run('agent-default'),
+    ).toThrow();
+    handle.sqlite.close();
+  });
+
+  it('rejects out-of-range baseline values on agents', () => {
+    const handle = freshDb();
+    expect(() =>
+      handle.sqlite.prepare('UPDATE agents SET baseline_valence = -1.5 WHERE id = ?').run('agent-default'),
+    ).toThrow();
+    handle.sqlite.close();
+  });
+
+  it('rejects non-positive decay_half_life_hours on agents', () => {
+    const handle = freshDb();
+    expect(() =>
+      handle.sqlite.prepare('UPDATE agents SET decay_half_life_hours = 0 WHERE id = ?').run('agent-default'),
+    ).toThrow();
+    handle.sqlite.close();
+  });
+
+  it('rejects out-of-range dominance on state events', () => {
+    const handle = freshDb();
+    fixtureConversation(handle);
+    expect(() =>
+      handle.sqlite
+        .prepare(
+          `INSERT INTO state_events
+             (id, agent_id, conversation_id, trigger_message_id, source,
+              rule_version, before_valence, before_arousal, delta_valence,
+              delta_arousal, after_valence, after_arousal, discrete_tag,
+              reason, evidence_text, confidence, created_at, after_dominance)
+           VALUES ('state_d', 'agent-default', 'conv_1', 'msg_1', 'user_message',
+                   'emotion-rules-v1', 0, 0, -0.1, -0.04, -0.1, -0.04, 'low',
+                   '原因', '累', 0.7, '${NOW}', 1.5)`,
+        )
+        .run(),
+    ).toThrow();
+    handle.sqlite.close();
+  });
+
   it('rejects invalid JSON in app_settings', () => {
     const handle = freshDb();
     expect(() =>

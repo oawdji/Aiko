@@ -25,14 +25,16 @@ export function mapAgentRow(row: AgentRow) {
     currentState: {
       valence: row.currentValence,
       arousal: row.currentArousal,
-      // dominance 列待 T3 迁移 agents 表后接入，暂为 0
-      dominance: 0,
+      dominance: row.currentDominance,
     },
     currentTag: row.currentTag,
     stateUpdatedAt: row.stateUpdatedAt,
-    // 基线/衰减参数列待 T3 迁移后接入，暂为中性默认
-    emotionBaseline: { valence: 0, arousal: 0, dominance: 0 },
-    decayHalfLifeHours: null,
+    emotionBaseline: {
+      valence: row.baselineValence,
+      arousal: row.baselineArousal,
+      dominance: row.baselineDominance,
+    },
+    decayHalfLifeHours: row.decayHalfLifeHours,
     personaVersion: row.activePersonaVersion,
   });
 }
@@ -70,9 +72,9 @@ export function mapStateEventRow(row: StateEventRow) {
     triggerMessageId: row.triggerMessageId,
     source: row.source,
     ruleVersion: row.ruleVersion,
-    before: { valence: row.beforeValence, arousal: row.beforeArousal, dominance: 0 },
-    delta: { valence: row.deltaValence, arousal: row.deltaArousal, dominance: 0 },
-    after: { valence: row.afterValence, arousal: row.afterArousal, dominance: 0 },
+    before: { valence: row.beforeValence, arousal: row.beforeArousal, dominance: row.beforeDominance },
+    delta: { valence: row.deltaValence, arousal: row.deltaArousal, dominance: row.deltaDominance },
+    after: { valence: row.afterValence, arousal: row.afterArousal, dominance: row.afterDominance },
     discreteTag: row.discreteTag,
     reason: row.reason,
     evidenceText: row.evidenceText,
