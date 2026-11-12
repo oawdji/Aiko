@@ -82,7 +82,7 @@ export function bootstrapAgent(handle: DbHandle, agentRef: string, now: string):
     .select()
     .from(messages)
     .where(eq(messages.conversationId, conversation.id))
-    .orderBy(desc(messages.createdAt), desc(messages.id))
+    .orderBy(desc(messages.createdAt), sql`rowid DESC`)
     .limit(BOOTSTRAP_MESSAGE_LIMIT)
     .all()
     .reverse();

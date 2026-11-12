@@ -163,3 +163,16 @@ describe('bootstrapAgent (M2.2)', () => {
     expect(response.latestStateEvent?.source).toBe('user_message');
   });
 });
+describe('bootstrapAgent message ordering (refresh order regression)', () => {
+  it('returns same-millisecond messages in insertion order: user before assistant', () => {
+    const convId = insertConversation({ id: 'conv_order' });
+    // 复现线上缺陷：两条消息 createdAt 相同，且 id 随机字典序与插入序相反
+    insertMessage('msg_zzz', convId, NOW, 'user');
+    insertMessage('msg_aaa', convId, NOW, 'assistant');
+
+    const response = bootstrapAgent(handle, 'default', NOW);
+    expect(response.conversation.id).toBe('conv_order');
+    expect(response.messages.map((m) => m.id)).toEqual(['msg_zzz', 'msg_aaa']);
+    expect(response.messages.map((m) => m.role)).toEqual(['user', 'assistant']);
+  });
+});

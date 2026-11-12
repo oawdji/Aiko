@@ -99,7 +99,7 @@ export function getConversationDetail(
     .select()
     .from(messages)
     .where(pageFilter)
-    .orderBy(desc(messages.createdAt), desc(messages.id))
+    .orderBy(desc(messages.createdAt), sql`rowid DESC`)
     .limit(limit + 1)
     .all();
 

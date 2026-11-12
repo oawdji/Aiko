@@ -364,7 +364,7 @@ export async function runChatPipeline(
     writeAssistantMessage(handle, {
       conversationId: persisted.conversationId,
       agentId: persisted.agentId,
-      now,
+      now: new Date().toISOString(),
       content: '',
       errorCode: 'LLM_REQUEST_FAILED',
     });
@@ -419,7 +419,7 @@ export function createChatResponse(
         writeAssistantMessage(handle, {
           conversationId: pipeline.conversationId,
           agentId: pipeline.agentId,
-          now,
+          now: new Date().toISOString(),
           content,
           errorCode: null,
         });
@@ -427,7 +427,7 @@ export function createChatResponse(
         writeAssistantMessage(handle, {
           conversationId: pipeline.conversationId,
           agentId: pipeline.agentId,
-          now,
+          now: new Date().toISOString(),
           content: '',
           errorCode: 'LLM_REQUEST_FAILED',
         });
