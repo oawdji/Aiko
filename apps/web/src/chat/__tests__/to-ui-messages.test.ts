@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_AGENT_ID } from '@aiko/shared';
 import type { ChatMessageDTO } from '@aiko/shared';
+import type { AppUIMessage } from '../types';
 import { toUiMessages } from '../utils/to-ui-messages';
 
 function makeMessage(
@@ -21,7 +22,7 @@ function makeMessage(
 
 describe('toUiMessages', () => {
   it('converts restored DTOs into text-part UIMessages', () => {
-    const result = toUiMessages([
+    const result: AppUIMessage[] = toUiMessages([
       makeMessage({ id: 'msg_1', role: 'user', content: '你好' }),
       makeMessage({ id: 'msg_2', role: 'assistant', content: '很高兴见到你' }),
     ]);
@@ -41,7 +42,7 @@ describe('toUiMessages', () => {
   });
 
   it('keeps message order stable', () => {
-    const result = toUiMessages([
+    const result: AppUIMessage[] = toUiMessages([
       makeMessage({ id: 'a' }),
       makeMessage({ id: 'b' }),
     ]);

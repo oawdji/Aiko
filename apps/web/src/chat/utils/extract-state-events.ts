@@ -1,20 +1,12 @@
-import type { UIMessage } from 'ai';
-import type { AgentStateEventData, AgentStateEvent } from '@aiko/shared';
+import type { AgentStateEvent } from '@aiko/shared';
+import type { AppUIMessage } from '../types';
 
-type StateDataPart = {
-  type: 'data-agent-state-event';
-  data: AgentStateEventData;
-};
-
-export function extractStateEvents(messages: UIMessage[]): AgentStateEvent[] {
+export function extractStateEvents(messages: AppUIMessage[]): AgentStateEvent[] {
   const events: AgentStateEvent[] = [];
   for (const message of messages) {
-    for (const part of message.parts as Array<{ type: string; data?: unknown }>) {
+    for (const part of message.parts) {
       if (part.type === 'data-agent-state-event') {
-        const data = (part as StateDataPart).data;
-        if (data && typeof data === 'object' && 'event' in data) {
-          events.push(data.event);
-        }
+        events.push(part.data.event);
       }
     }
   }

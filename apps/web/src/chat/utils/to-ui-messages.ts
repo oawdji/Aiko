@@ -1,7 +1,7 @@
-import type { UIMessage } from 'ai';
 import type { ChatMessageDTO } from '@aiko/shared';
+import type { AppUIMessage } from '../types';
 
-export function toUiMessages(messages: ChatMessageDTO[]): UIMessage[] {
+export function toUiMessages(messages: ChatMessageDTO[]): AppUIMessage[] {
   return messages.map((message) => ({
     id: message.id,
     role: message.role,
