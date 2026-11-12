@@ -21,9 +21,11 @@ import { agentStateStore } from '../shared/stores/agent-state-store';
  */
 export function ChatView({ bootstrap }: { bootstrap: BootstrapResponse }) {
   const serverStatus = useServerHealth();
-  const { messages, sendMessage, status, stop, error } = useAgentChat(
-    bootstrap.messages,
-  );
+  const { messages, sendMessage, status, stop, error } = useAgentChat({
+    restoredMessages: bootstrap.messages,
+    conversationId: bootstrap.conversation.id,
+    agentId: bootstrap.agent.id,
+  });
 
   const stateEvents = extractStateEvents(messages);
   const appliedEventIdRef = useRef<string | null>(
