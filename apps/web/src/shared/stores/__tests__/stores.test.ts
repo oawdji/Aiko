@@ -46,8 +46,8 @@ function makeEvent(id: string): AgentStateEvent {
     source: 'user_message',
     ruleVersion: 'emotion-rules-v1',
     before: { valence: 0, arousal: 0, dominance: 0 },
-    delta: { valence: -0.1, arousal: -0.04, dominance: 0 },
-    after: { valence: -0.1, arousal: -0.04, dominance: 0 },
+    delta: { valence: -0.1, arousal: -0.04, dominance: 0.03 },
+    after: { valence: -0.1, arousal: -0.04, dominance: 0.03 },
     discreteTag: 'low',
     reason: '累',
     evidenceText: '累',
@@ -114,6 +114,7 @@ describe('agentStateStore', () => {
     const state = agentStateStore.getState();
     expect(state.latestEvent?.id).toBe('state_1');
     expect(state.state).toEqual(event.after);
+    expect(state.state.dominance).toBe(0.03);
     expect(state.receivedCount).toBe(1);
     expect(state.stateUpdatedAt).toBe(event.createdAt);
   });

@@ -1,4 +1,5 @@
 import { useAgentStateStore } from '../../shared/stores/agent-state-store';
+import { EmotionBars } from './EmotionBars';
 
 /**
  * 状态面板：只订阅 AgentStateStore（react-architecture.md §12.1），
@@ -12,13 +13,11 @@ export function StatusPanel() {
 
   return (
     <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-4">
-      <h2 className="mb-2 text-sm font-semibold">Agent 状态</h2>
-      <div className="space-y-1 text-xs text-neutral-300">
+      <h2 className="mb-3 text-sm font-semibold">Agent 状态</h2>
+      <div className="space-y-3 text-xs text-neutral-300">
+        <EmotionBars state={state} />
         <p>
-          valence:{' '}
-          <span className="text-sky-400">{state.valence.toFixed(2)}</span> / arousal:{' '}
-          <span className="text-amber-400">{state.arousal.toFixed(2)}</span> / tag:{' '}
-          <span className="text-emerald-400">{discreteTag}</span>
+          tag：<span className="text-emerald-400">{discreteTag}</span>
         </p>
         {latestEvent ? (
           <>
