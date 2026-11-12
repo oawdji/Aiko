@@ -1,14 +1,6 @@
-export type ChatMessageRole = 'user' | 'assistant' | 'system';
-
-export type ChatMessageStatus = 'streaming' | 'complete' | 'failed';
-
-export type ChatMessageDTO = {
-  id: string;
-  conversationId: string;
-  agentId: string;
-  role: ChatMessageRole;
-  content: string;
-  status: ChatMessageStatus;
-  errorCode: string | null;
-  createdAt: string;
-};
+// 类型本体与校验规则统一由 schemas/api.ts 的 Zod schema 推导（M2.1）。
+export type {
+  ChatMessageRole,
+  ChatMessageStatus,
+  ChatMessageDTO,
+} from '../schemas/api';

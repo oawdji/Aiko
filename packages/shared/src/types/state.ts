@@ -1,27 +1,10 @@
-import type { AgentEmotionState, EmotionTag } from './emotion';
+import type { AgentStateEvent } from '../schemas/api';
 
-export type AgentStateEventSource =
-  | 'user_message'
-  | 'assistant_message'
-  | 'time_decay'
-  | 'manual';
-
-export type AgentStateEvent = {
-  id: string;
-  agentId: string;
-  conversationId: string;
-  triggerMessageId: string | null;
-  source: AgentStateEventSource;
-  ruleVersion: string;
-  before: AgentEmotionState;
-  delta: AgentEmotionState;
-  after: AgentEmotionState;
-  discreteTag: EmotionTag;
-  reason: string;
-  evidenceText: string;
-  confidence: number;
-  createdAt: string;
-};
+// 状态事件类型本体由 schemas/api.ts 推导（M2.1）。
+export type {
+  AgentStateEventSource,
+  AgentStateEvent,
+} from '../schemas/api';
 
 export type AgentStateEventData = {
   event: AgentStateEvent;
