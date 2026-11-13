@@ -7,6 +7,7 @@ import { bootstrapRoute } from './bootstrap/route';
 import { conversationsRoute } from './conversations/route';
 import { chatRoute } from './chat/route';
 import { settingsRoute } from './settings/route';
+import { memoriesRoute } from './memories/route';
 import { devMockChatRoute } from './api/dev-mock-chat';
 import { loadServerConfig } from './config/server';
 import { loadDbConfig } from './config/db';
@@ -29,6 +30,7 @@ app.route('/api', bootstrapRoute);
 app.route('/api', conversationsRoute);
 app.route('/api', chatRoute);
 app.route('/api', settingsRoute);
+app.route('/api', memoriesRoute);
 // mock 端点仅限开发环境，不随生产构建暴露
 if (process.env.NODE_ENV !== 'production') {
   app.route('/api', devMockChatRoute);
