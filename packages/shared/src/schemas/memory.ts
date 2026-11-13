@@ -56,6 +56,12 @@ export const MemoryListQuerySchema = z.object({
 });
 export type MemoryListQuery = z.infer<typeof MemoryListQuerySchema>;
 
+/** GET /api/memories 响应 */
+export const MemoryListResponseSchema = z.object({
+  memories: z.array(MemoryFactDTOSchema),
+});
+export type MemoryListResponse = z.infer<typeof MemoryListResponseSchema>;
+
 /** PATCH /api/memories/:id 请求体（修正内容与类型，F17） */
 export const MemoryPatchBodySchema = z.object({
   content: z.string().min(1).optional(),
