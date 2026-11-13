@@ -7,6 +7,7 @@ import {
 } from '@aiko/shared';
 import type { DbHandle } from '../db/client';
 import { memories, type Memory, type NewMemory } from '../db/schema';
+import { ensureMemorySearchIndex, normalizeForFts } from './search-index';
 
 /**
  * memories repository：memories 表的唯一 SQL 出入口（memory-emotion-design.md §一）。
@@ -35,7 +36,20 @@ export function toDto(row: Memory): MemoryFactDTO {
 }
 
 export function insertMemory(handle: DbHandle, values: NewMemory): Memory {
-  return handle.db.insert(memories).values(values).returning().get();
+  const row = handle.db.insert(memories).values(values).returning().get();
+  syncFts(handle, row.id, row.content);
+  return row;
+}
+
+/** FTS 同步（内容写入/修正时调用）；本期无物理删除，软删由检索 status 过滤。 */
+export function syncFts(handle: DbHandle, memoryId: string, content: string): void {
+  ensureMemorySearchIndex(handle);
+  handle.sqlite
+    .prepare('DELETE FROM memories_fts WHERE memory_id = ?')
+    .run(memoryId);
+  handle.sqlite
+    .prepare('INSERT INTO memories_fts (content, memory_id) VALUES (?, ?)')
+    .run(normalizeForFts(content), memoryId);
 }
 
 export function findMemoryById(
@@ -84,12 +98,14 @@ export function updateMemoryRow(
   id: string,
   patch: Partial<Pick<Memory, 'content' | 'type' | 'status' | 'updatedAt'>>,
 ): Memory {
-  return handle.db
+  const row = handle.db
     .update(memories)
     .set(patch)
     .where(eq(memories.id, id))
     .returning()
     .get();
+  if (patch.content !== undefined && row) syncFts(handle, id, row.content);
+  return row;
 }
 
 export type SameTypeActiveMemory = Pick<

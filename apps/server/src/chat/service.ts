@@ -23,6 +23,7 @@ import { defaultEmotionEngine, type EmotionEngine } from './emotion-engine';
 import { computeDisplayState, resolveDecayConfig, revertToBaseline } from './emotion-decay';
 import { buildEmotionPromptLine } from './emotion-prompt';
 import { scheduleFactExtraction } from '../extraction/pipeline';
+import { searchMemories, updateLastAccessed } from '../memories/retrieval';
 import type { CompleteFn } from '../extraction/types';
 
 export class ChatAgentNotFoundError extends Error {
@@ -392,8 +393,35 @@ export async function runChatPipeline(
   const emotionLine = agentRow
     ? buildEmotionPromptLine(computeDisplayState(agentRow, now), agentRow.currentTag as EmotionTag)
     : null;
+  // S3c：检索 Top-K active 记忆注入 system（语义 + 情感一致性 + 时间），F18 删除即失效
+  const memoryHits = searchMemories(handle, {
+    owner: { userId: LOCAL_USER_ID, agentId: persisted.agentId },
+    queryText: body.message,
+    currentPad: stateEvent
+      ? {
+          v: stateEvent.after.valence,
+          a: stateEvent.after.arousal,
+          d: stateEvent.after.dominance,
+        }
+      : null,
+    nowIso: now,
+  });
+  const memoryLine =
+    memoryHits.length > 0
+      ? '关于用户的长期记忆（自然地运用，不要逐条复述）：\n' +
+        memoryHits.map((m) => '- ' + m.content).join('\n')
+      : null;
+  // 再巩固入口：命中即刷新 last_accessed_at（S4 formalize；随抽取 promise 一起被测试等待）
+  const memoryAccess = Promise.resolve().then(() =>
+    updateLastAccessed(handle, memoryHits.map((m) => m.id), now),
+  );
+  void memoryExtraction.then(() => memoryAccess).catch(() => undefined);
+
+  const systemParts = [PERSONA_CORE_MD];
+  if (emotionLine) systemParts.push(emotionLine);
+  if (memoryLine) systemParts.push(memoryLine);
   const prompt = {
-    system: emotionLine ? `${PERSONA_CORE_MD}\n\n${emotionLine}` : PERSONA_CORE_MD,
+    system: systemParts.join('\n\n'),
     messages: loadRecentWindow(handle, persisted.conversationId, 30),
   };
 
