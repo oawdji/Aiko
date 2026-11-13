@@ -7,12 +7,16 @@ import { bootstrapRoute } from './bootstrap/route';
 import { conversationsRoute } from './conversations/route';
 import { chatRoute } from './chat/route';
 import { settingsRoute } from './settings/route';
+import { memoriesRoute } from './memories/route';
+import { stateTimelineRoute } from './state-timeline/route';
+import { dataControlRoute } from './data-control/route';
 import { devMockChatRoute } from './api/dev-mock-chat';
 import { loadServerConfig } from './config/server';
 import { loadDbConfig } from './config/db';
 import { loadLlmConfig } from './config/llm';
 import { getDb } from './db';
 import { runMigrations } from './db/migrate';
+import { ensureMemorySearchIndex } from './memories/search-index';
 import { seedDefaultData } from './db/seed';
 
 const app = new Hono();
@@ -29,6 +33,9 @@ app.route('/api', bootstrapRoute);
 app.route('/api', conversationsRoute);
 app.route('/api', chatRoute);
 app.route('/api', settingsRoute);
+app.route('/api', memoriesRoute);
+app.route('/api', stateTimelineRoute);
+app.route('/api', dataControlRoute);
 // mock 端点仅限开发环境，不随生产构建暴露
 if (process.env.NODE_ENV !== 'production') {
   app.route('/api', devMockChatRoute);
@@ -46,6 +53,7 @@ const config = loadServerConfig();
 const dbConfig = loadDbConfig();
 const db = getDb();
 runMigrations(db, dbConfig.migrationsFolder);
+ensureMemorySearchIndex(db);
 seedDefaultData(db, new Date().toISOString());
 console.log(`Database ready (migrations + seed applied): ${db.databasePath}`);
 

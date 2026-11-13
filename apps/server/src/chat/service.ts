@@ -22,6 +22,12 @@ import { EMOTION_RULES_VERSION, applyEmotion, computeTag, type EmotionExtraction
 import { defaultEmotionEngine, type EmotionEngine } from './emotion-engine';
 import { computeDisplayState, resolveDecayConfig, revertToBaseline } from './emotion-decay';
 import { buildEmotionPromptLine } from './emotion-prompt';
+import { scheduleFactExtraction } from '../extraction/pipeline';
+import { searchMemories, updateLastAccessed } from '../memories/retrieval';
+import { maybeTriggerSummary, reconsolidateHits, runSummaryTask } from '../memories/lifecycle';
+import { isDebugModeEnabled } from '../settings/service';
+import { promptSnapshots } from '../db/schema';
+import type { CompleteFn } from '../extraction/types';
 
 export class ChatAgentNotFoundError extends Error {
   constructor(agentRef: string) {
@@ -78,6 +84,8 @@ export type ChatPipelineResult = {
   conversationId: string;
   userMessageId: string;
   stateEvent: ChatStateEventData | null;
+  /** fire-and-forget 的事实抽取 promise，route 不 await；仅测试用 */
+  memoryExtraction?: Promise<number>;
   llm: LlmStreamHandle;
 };
 
@@ -349,6 +357,7 @@ export async function runChatPipeline(
   now: string,
   llmFactory?: LlmStreamFactory,
   emotionEngine: EmotionEngine = defaultEmotionEngine,
+  extractComplete?: CompleteFn,
 ): Promise<ChatPipelineResult> {
   const persisted = persistUserMessage(handle, body, now);
 
@@ -363,15 +372,85 @@ export async function runChatPipeline(
       })
     : null;
 
+  // S3b：fire-and-forget 事实抽取（写入层），失败不影响聊天流
+  const memoryExtraction = scheduleFactExtraction(
+    handle,
+    {
+      owner: { userId: LOCAL_USER_ID, agentId: persisted.agentId },
+      sourceMessageId: persisted.messageId,
+      userText: body.message,
+      pad: stateEvent
+        ? {
+            v: stateEvent.after.valence,
+            a: stateEvent.after.arousal,
+            d: stateEvent.after.dominance,
+          }
+        : null,
+      now,
+    },
+    extractComplete,
+  );
+
   // Prompt 注入当前情绪（读时回归后的展示态，§10.11）
   const agentRow = handle.db.select().from(agents).where(eq(agents.id, persisted.agentId)).get();
   const emotionLine = agentRow
     ? buildEmotionPromptLine(computeDisplayState(agentRow, now), agentRow.currentTag as EmotionTag)
     : null;
+  // S3c：检索 Top-K active 记忆注入 system（语义 + 情感一致性 + 时间），F18 删除即失效
+  const memoryHits = searchMemories(handle, {
+    owner: { userId: LOCAL_USER_ID, agentId: persisted.agentId },
+    queryText: body.message,
+    currentPad: stateEvent
+      ? {
+          v: stateEvent.after.valence,
+          a: stateEvent.after.arousal,
+          d: stateEvent.after.dominance,
+        }
+      : null,
+    nowIso: now,
+  });
+  const memoryLine =
+    memoryHits.length > 0
+      ? '关于用户的长期记忆（自然地运用，不要逐条复述）：\n' +
+        memoryHits.map((m) => '- ' + m.content).join('\n')
+      : null;
+  // 再巩固入口：命中即刷新 last_accessed_at（S4 formalize；随抽取 promise 一起被测试等待）
+  const memoryAccess = Promise.resolve().then(() => {
+    updateLastAccessed(handle, memoryHits.map((m) => m.id), now);
+    reconsolidateHits(handle, memoryHits.map((m) => m.id), now);
+    const summary = maybeTriggerSummary(handle, persisted.conversationId, persisted.agentId, now);
+    if (summary.triggered && extractComplete) {
+      return runSummaryTask(handle, summary.summaryId!, extractComplete, new Date().toISOString());
+    }
+    return undefined;
+  });
+  void memoryExtraction.then(() => memoryAccess).catch(() => undefined);
+
+  const systemParts = [PERSONA_CORE_MD];
+  if (emotionLine) systemParts.push(emotionLine);
+  if (memoryLine) systemParts.push(memoryLine);
   const prompt = {
-    system: emotionLine ? `${PERSONA_CORE_MD}\n\n${emotionLine}` : PERSONA_CORE_MD,
+    system: systemParts.join('\n\n'),
     messages: loadRecentWindow(handle, persisted.conversationId, 30),
   };
+
+  // F36 调试模式：仅在 app_settings.debug_mode 开启时写入 Prompt 快照
+  if (isDebugModeEnabled(handle)) {
+    try {
+      handle.db.insert(promptSnapshots).values({
+        id: `snap_${randomUUID()}`,
+        agentId: persisted.agentId,
+        conversationId: persisted.conversationId,
+        userMessageId: persisted.messageId,
+        systemText: prompt.system,
+        memoryIdsJson: JSON.stringify(memoryHits.map((m) => m.id)),
+        recentWindowCount: String(prompt.messages.length),
+        createdAt: now,
+      }).run();
+    } catch (error) {
+      console.warn('[debug] prompt snapshot failed:', error);
+    }
+  }
 
   let llm: LlmStreamHandle;
   try {
@@ -396,6 +475,7 @@ export async function runChatPipeline(
     userMessageId: persisted.messageId,
     stateEvent,
     llm,
+    memoryExtraction,
   };
 }
 /** UI 流组装：状态事件 data part 先于文本增量（Phase 0 锁定顺序），结束后 assistant 落库。 */

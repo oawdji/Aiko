@@ -7,6 +7,8 @@ import { useAgentChat } from '../chat/hooks/use-agent-chat';
 import { extractStateEvents } from '../chat/utils/extract-state-events';
 import { DevChecklist } from './DevChecklist';
 import { SettingsDialog } from '../settings/components/SettingsDialog';
+import { MemoryViewer } from '../memories/components/MemoryViewer';
+import { StatusTimeline } from '../status/components/StatusTimeline';
 import { fetchSettings } from '../shared/api/settings-api';
 import { StatusPanel } from '../status/components/StatusPanel';
 import { ErrorNotice } from '../shared/components/ErrorNotice';
@@ -44,6 +46,7 @@ export function ChatView({ bootstrap }: { bootstrap: BootstrapResponse }) {
 
   const [llmSettings, setLlmSettings] = useState<SettingsResponse | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [memoriesOpen, setMemoriesOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -69,6 +72,14 @@ export function ChatView({ bootstrap }: { bootstrap: BootstrapResponse }) {
           <p className="text-sm text-neutral-400">
             会话已恢复 · {bootstrap.messages.length} 条历史消息
           </p>
+          <button
+            type="button"
+            aria-label="打开记忆查看器"
+            onClick={() => setMemoriesOpen(true)}
+            className="absolute right-16 top-2 rounded-lg border border-neutral-700 px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800"
+          >
+            🧠 记忆
+          </button>
           <button
             type="button"
             aria-label="打开设置"
@@ -129,8 +140,11 @@ export function ChatView({ bootstrap }: { bootstrap: BootstrapResponse }) {
         onClose={() => setSettingsOpen(false)}
       />
 
+      <MemoryViewer open={memoriesOpen} onClose={() => setMemoriesOpen(false)} />
+
       <aside className="w-full shrink-0 space-y-3 lg:w-80">
         <StatusPanel />
+        <StatusTimeline agentId={bootstrap.agent.id} />
         <DevChecklist />
       </aside>
     </main>

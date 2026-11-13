@@ -197,3 +197,7 @@ export async function testLlmConnection(handle: DbHandle): Promise<LlmConnection
     return { ok: false, latencyMs: Date.now() - start, errorCode: 'LLM_REQUEST_FAILED' };
   }
 }
+/** F36 调试模式开关（app_settings.debug_mode，默认关闭）。 */
+export function isDebugModeEnabled(handle: DbHandle): boolean {
+  return readSettingValue(handle, 'debug_mode') === true;
+}
