@@ -15,6 +15,13 @@
       "when": 1794463314430,
       "tag": "0001_concerned_preak",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1794538831341,
+      "tag": "0002_dry_shockwave",
+      "breakpoints": true
     }
   ]
 }
