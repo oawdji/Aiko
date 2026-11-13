@@ -22,6 +22,8 @@ import { EMOTION_RULES_VERSION, applyEmotion, computeTag, type EmotionExtraction
 import { defaultEmotionEngine, type EmotionEngine } from './emotion-engine';
 import { computeDisplayState, resolveDecayConfig, revertToBaseline } from './emotion-decay';
 import { buildEmotionPromptLine } from './emotion-prompt';
+import { scheduleFactExtraction } from '../extraction/pipeline';
+import type { CompleteFn } from '../extraction/types';
 
 export class ChatAgentNotFoundError extends Error {
   constructor(agentRef: string) {
@@ -78,6 +80,8 @@ export type ChatPipelineResult = {
   conversationId: string;
   userMessageId: string;
   stateEvent: ChatStateEventData | null;
+  /** fire-and-forget 的事实抽取 promise，route 不 await；仅测试用 */
+  memoryExtraction?: Promise<number>;
   llm: LlmStreamHandle;
 };
 
@@ -349,6 +353,7 @@ export async function runChatPipeline(
   now: string,
   llmFactory?: LlmStreamFactory,
   emotionEngine: EmotionEngine = defaultEmotionEngine,
+  extractComplete?: CompleteFn,
 ): Promise<ChatPipelineResult> {
   const persisted = persistUserMessage(handle, body, now);
 
@@ -362,6 +367,25 @@ export async function runChatPipeline(
         now,
       })
     : null;
+
+  // S3b：fire-and-forget 事实抽取（写入层），失败不影响聊天流
+  const memoryExtraction = scheduleFactExtraction(
+    handle,
+    {
+      owner: { userId: LOCAL_USER_ID, agentId: persisted.agentId },
+      sourceMessageId: persisted.messageId,
+      userText: body.message,
+      pad: stateEvent
+        ? {
+            v: stateEvent.after.valence,
+            a: stateEvent.after.arousal,
+            d: stateEvent.after.dominance,
+          }
+        : null,
+      now,
+    },
+    extractComplete,
+  );
 
   // Prompt 注入当前情绪（读时回归后的展示态，§10.11）
   const agentRow = handle.db.select().from(agents).where(eq(agents.id, persisted.agentId)).get();
@@ -396,6 +420,7 @@ export async function runChatPipeline(
     userMessageId: persisted.messageId,
     stateEvent,
     llm,
+    memoryExtraction,
   };
 }
 /** UI 流组装：状态事件 data part 先于文本增量（Phase 0 锁定顺序），结束后 assistant 落库。 */
