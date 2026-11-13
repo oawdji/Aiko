@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { devMockChatRoute } from '../api/dev-mock-chat';
+import { devMockChatRoute } from '../dev-mock-chat';
 
 function requestBody(text: string) {
   return JSON.stringify({

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { loadLlmConfig } from '../config/llm';
+import { loadLlmConfig } from '../llm';
 
 const validEnv = {
   LLM_API_KEY: 'sk-test',
