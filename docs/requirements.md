@@ -1230,6 +1230,8 @@ DELETE /api/data
 
 ## Phase 2：长期记忆与透明性
 
+> 技术设计与实施步骤见 [memory-emotion-design.md](./memory-emotion-design.md)。
+
 目标：让用户感知 Agent 真的记得，并能够控制这些记忆。
 
 范围：

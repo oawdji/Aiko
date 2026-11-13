@@ -1439,6 +1439,8 @@ tag = neutral
 
 ## 14.1 未来 `memories` 表要点
 
+> 完整字段设计（含 memory_pad / arousal / half_life 等情感字段）见 [memory-emotion-design.md](./memory-emotion-design.md) §3。
+
 Phase 2 设计时至少需要：
 
 ```text
