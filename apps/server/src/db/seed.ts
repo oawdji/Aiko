@@ -17,6 +17,7 @@ const DEFAULT_SETTINGS: Array<[key: string, valueJson: string]> = [
   ['recent_window_rounds', JSON.stringify(15)],
   ['max_context_messages', JSON.stringify(30)],
   ['theme', JSON.stringify('system')],
+  ['debug_mode', JSON.stringify(false)],
 ];
 
 /**

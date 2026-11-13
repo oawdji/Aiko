@@ -25,6 +25,8 @@ import { buildEmotionPromptLine } from './emotion-prompt';
 import { scheduleFactExtraction } from '../extraction/pipeline';
 import { searchMemories, updateLastAccessed } from '../memories/retrieval';
 import { maybeTriggerSummary, reconsolidateHits, runSummaryTask } from '../memories/lifecycle';
+import { isDebugModeEnabled } from '../settings/service';
+import { promptSnapshots } from '../db/schema';
 import type { CompleteFn } from '../extraction/types';
 
 export class ChatAgentNotFoundError extends Error {
@@ -431,6 +433,24 @@ export async function runChatPipeline(
     system: systemParts.join('\n\n'),
     messages: loadRecentWindow(handle, persisted.conversationId, 30),
   };
+
+  // F36 调试模式：仅在 app_settings.debug_mode 开启时写入 Prompt 快照
+  if (isDebugModeEnabled(handle)) {
+    try {
+      handle.db.insert(promptSnapshots).values({
+        id: `snap_${randomUUID()}`,
+        agentId: persisted.agentId,
+        conversationId: persisted.conversationId,
+        userMessageId: persisted.messageId,
+        systemText: prompt.system,
+        memoryIdsJson: JSON.stringify(memoryHits.map((m) => m.id)),
+        recentWindowCount: String(prompt.messages.length),
+        createdAt: now,
+      }).run();
+    } catch (error) {
+      console.warn('[debug] prompt snapshot failed:', error);
+    }
+  }
 
   let llm: LlmStreamHandle;
   try {
