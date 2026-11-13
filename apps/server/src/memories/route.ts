@@ -19,6 +19,7 @@ import {
   restoreMemory,
 } from './service';
 import type { MemoryOwner } from './repository';
+import { refreshStrengths } from './lifecycle';
 
 /**
  * /api/memories（api-contract §6.5，memory-emotion-design.md §7.1）。
@@ -65,6 +66,7 @@ export const memoriesRoute = new Hono()
       );
     }
     try {
+      refreshStrengths(getDb(), resolveOwner(), new Date().toISOString());
       return c.json({ memories: getMemories(getDb(), resolveOwner(), parsed.data) });
     } catch (error) {
       return handleError(c, error, '*');

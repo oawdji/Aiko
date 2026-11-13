@@ -24,6 +24,7 @@ import { computeDisplayState, resolveDecayConfig, revertToBaseline } from './emo
 import { buildEmotionPromptLine } from './emotion-prompt';
 import { scheduleFactExtraction } from '../extraction/pipeline';
 import { searchMemories, updateLastAccessed } from '../memories/retrieval';
+import { maybeTriggerSummary, reconsolidateHits, runSummaryTask } from '../memories/lifecycle';
 import type { CompleteFn } from '../extraction/types';
 
 export class ChatAgentNotFoundError extends Error {
@@ -412,9 +413,15 @@ export async function runChatPipeline(
         memoryHits.map((m) => '- ' + m.content).join('\n')
       : null;
   // 再巩固入口：命中即刷新 last_accessed_at（S4 formalize；随抽取 promise 一起被测试等待）
-  const memoryAccess = Promise.resolve().then(() =>
-    updateLastAccessed(handle, memoryHits.map((m) => m.id), now),
-  );
+  const memoryAccess = Promise.resolve().then(() => {
+    updateLastAccessed(handle, memoryHits.map((m) => m.id), now);
+    reconsolidateHits(handle, memoryHits.map((m) => m.id), now);
+    const summary = maybeTriggerSummary(handle, persisted.conversationId, persisted.agentId, now);
+    if (summary.triggered && extractComplete) {
+      return runSummaryTask(handle, summary.summaryId!, extractComplete, new Date().toISOString());
+    }
+    return undefined;
+  });
   void memoryExtraction.then(() => memoryAccess).catch(() => undefined);
 
   const systemParts = [PERSONA_CORE_MD];
