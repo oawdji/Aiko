@@ -19,10 +19,14 @@ import { PERSONA_CORE_MD } from '../db/generated/persona-core';
 import { agents, conversations, messages, stateEvents } from '../db/schema';
 import { type PromptMessage } from './recent-window';
 import { EMOTION_RULES_VERSION, applyEmotion, computeTag, type EmotionExtraction } from './emotion-rules';
-import { defaultEmotionEngine, type EmotionEngine } from './emotion-engine';
+import {
+  createEmotionEngine,
+  resolveDefaultEmotionEngineId,
+  type EmotionEngine,
+} from './emotion-engine';
 import { computeDisplayState, resolveDecayConfig, revertToBaseline } from './emotion-decay';
 import { buildEmotionPromptLine } from './emotion-prompt';
-import { scheduleFactExtraction } from '../extraction/pipeline';
+import { createDefaultExtractComplete, scheduleFactExtraction } from '../extraction/pipeline';
 import { searchMemories, updateLastAccessed } from '../memories/retrieval';
 import { maybeTriggerSummary, reconsolidateHits, runSummaryTask } from '../memories/lifecycle';
 import { isDebugModeEnabled } from '../settings/service';
@@ -356,12 +360,18 @@ export async function runChatPipeline(
   body: ChatRequestBody,
   now: string,
   llmFactory?: LlmStreamFactory,
-  emotionEngine: EmotionEngine = defaultEmotionEngine,
+  emotionEngine?: EmotionEngine,
   extractComplete?: CompleteFn,
 ): Promise<ChatPipelineResult> {
   const persisted = persistUserMessage(handle, body, now);
 
-  const extraction = emotionEngine(body.message);
+  const engine =
+    emotionEngine ??
+    createEmotionEngine(
+      resolveDefaultEmotionEngineId(),
+      extractComplete ?? createDefaultExtractComplete(handle),
+    );
+  const extraction = await engine(body.message);
   const stateEvent = extraction
     ? applyStateEvent(handle, {
         agentId: persisted.agentId,
@@ -548,3 +558,4 @@ export async function handleChatRequest(
   const pipeline = await runChatPipeline(handle, deps.body, now, deps.llmFactory, deps.emotionEngine);
   return createChatResponse(handle, pipeline, now);
 }
+
