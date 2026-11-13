@@ -123,3 +123,4 @@ T1(接口) ──► T2 / T3 / T4(三个独立组件,可并行)
 1. 具体文件路径按 monorepo 实际包结构落位(`apps/` 下哪个应用承载对话管道、`packages/` 下是否新建 `memory` 包)。
 2. ~~推理进程语言~~ 已定:Python(sentence-transformers)独立模块(services/embedding/),TS 主应用后续经本地 HTTP 调用,保持 T2 边界。
 
+
