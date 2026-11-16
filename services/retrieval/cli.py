@@ -21,6 +21,10 @@ from services.retrieval.local_retriever import LocalMemoryRetriever
 
 def main() -> int:
     try:
+        # 协议约定 UTF-8 JSON;Windows 下 Python 默认按系统编码(GBK)解码 stdin,
+        # 中文内容会变成乱码并触发下游 tokenizer 异常,这里显式统一为 UTF-8。
+        sys.stdin.reconfigure(encoding="utf-8")
+        sys.stdout.reconfigure(encoding="utf-8")
         request = json.loads(sys.stdin.readline())
         retriever = LocalMemoryRetriever()
         if request.get("op") == "index":
