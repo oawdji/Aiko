@@ -20,14 +20,13 @@ import { agents, conversations, messages, stateEvents } from '../db/schema';
 import { type PromptMessage } from './recent-window';
 import {
   EMOTION_EXTRACTION_VERSION,
-  EMOTION_MARKER_MAX_CHARS,
   applyEmotion,
-  buildEmotionInstruction,
+  buildExtraction,
   computeTag,
   isEmotionEngineEnabled,
-  parseEmotionMarker,
   type EmotionExtraction,
 } from './emotion-llm';
+import { extractEmotionViaLlm } from './emotion-extract';
 import { computeDisplayState, resolveDecayConfig, revertToBaseline } from './emotion-decay';
 import { buildEmotionPromptLine } from './emotion-prompt';
 import { loadMemoryConfig } from '../config/memory';
@@ -92,6 +91,8 @@ export type ChatPipelineResult = {
   userMessage: string;
   memory: MemoryClient | null;
   llm: LlmStreamHandle;
+  /** 聊天前独立抽取已落库的状态事件（可能为 null = 引擎关/抽取失败降级）。 */
+  stateEvent: ChatStateEventData | null;
 };
 
 /** LLM 结果抽象：真实 streamText 与测试 fake 都满足此形状。 */
@@ -99,6 +100,11 @@ export type LlmStreamHandle = {
   text: PromiseLike<string>;
   toUimessageStream: () => ReadableStream<UIMessageChunk> | AsyncIterable<UIMessageChunk>;
 };
+
+export type EmotionExtractor = (
+  userMessage: string,
+  recent: PromptMessage[],
+) => Promise<{ tag: string; intensity: number; reason: string } | null>;
 
 export type LlmStreamFactory = (prompt: {
   system: string;
@@ -127,7 +133,7 @@ function isUniqueViolation(error: unknown): boolean {
     typeof error === 'object' &&
     error !== null &&
     'code' in error &&
-    (error as { code?: string }).code === 'SQLITE_CONSTRAINT_UNIQUE'
+    (error as { code?: unknown }).code === 'SQLITE_CONSTRAINT_UNIQUE'
   );
 }
 
@@ -196,7 +202,7 @@ export function persistUserMessage(
   return { messageId, conversationId: conversation.id, agentId: agent.id };
 }
 
-/** M3.3 接线：无线索返回 null（§10.6 不生成事件）；有线索落 state_event 并更新 agent 快照。 */
+/** 状态事件落库并更新 agent 快照（含读时回归 → delta → 三维快照写入）。 */
 export function applyStateEvent(
   handle: DbHandle,
   params: {
@@ -214,7 +220,6 @@ export function applyStateEvent(
     throw new ChatAgentNotFoundError(params.agentId);
   }
 
-  // 先基线回归（OU，§10.11），再叠加 delta；回归折叠进本事件 before，不落 time_decay 事件
   const before = revertToBaseline(
     { valence: agent.currentValence, arousal: agent.currentArousal, dominance: agent.currentDominance },
     { valence: agent.baselineValence, arousal: agent.baselineArousal, dominance: agent.baselineDominance },
@@ -238,10 +243,13 @@ export function applyStateEvent(
         ruleVersion: EMOTION_EXTRACTION_VERSION,
         beforeValence: before.valence,
         beforeArousal: before.arousal,
+        beforeDominance: before.dominance,
         deltaValence: delta.valence,
         deltaArousal: delta.arousal,
+        deltaDominance: delta.dominance,
         afterValence: after.valence,
         afterArousal: after.arousal,
+        afterDominance: after.dominance,
         discreteTag,
         reason: params.extraction.reason,
         evidenceText: params.extraction.evidenceText,
@@ -276,7 +284,7 @@ export function applyStateEvent(
   };
 }
 
-/** 数据库近期窗口（替代 Phase 0 的前端携带历史，见 recent-window.ts 注释）。 */
+/** 数据库近期窗口。 */
 export function loadRecentWindow(handle: DbHandle, conversationId: string, limit: number): PromptMessage[] {
   return handle.db
     .select()
@@ -319,8 +327,7 @@ function writeAssistantMessage(
 }
 
 /**
- * 默认 LLM 工厂：每次调用时解析生效配置（app_settings 覆盖 > 环境变量 > 默认值），
- * 失败（含未配置 Key）映射为契约错误。设置修改后热生效、无需重启。
+ * 默认 LLM 工厂：每次调用时解析生效配置，失败归一为 LLM_REQUEST_FAILED。
  */
 export function createDefaultLlmStreamFactory(handle: DbHandle): LlmStreamFactory {
   return ({ system, messages: prompt }) => {
@@ -346,16 +353,15 @@ export function createDefaultLlmStreamFactory(handle: DbHandle): LlmStreamFactor
       if (error instanceof LlmRequestFailedError) {
         throw error;
       }
-      // 配置缺失等同步失败也归一为 LLM_REQUEST_FAILED
       throw new LlmRequestFailedError(error instanceof Error ? error.message : undefined);
     }
   };
 }
 
 /**
- * M3.4 编排（api-contract.md §13.5 流程 5–11）：
- * 用户消息 → 情绪抽取/事件 → Prompt 组装（PERSONA_CORE + 数据库近期窗口）→ LLM 流式。
- * assistant 落库发生在 UI stream 消费完成之后（createChatResponse 内）。
+ * 聊天编排：
+ * 用户消息 → 独立情绪抽取（方案 1）→ 状态事件落库 → Prompt 组装（含更新后情绪）→ LLM 流式。
+ * 情绪事件先于回复产生，createChatResponse 在流开头补发。
  */
 export async function runChatPipeline(
   handle: DbHandle,
@@ -363,24 +369,46 @@ export async function runChatPipeline(
   now: string,
   llmFactory?: LlmStreamFactory,
   memory?: MemoryClient | null,
+  emotionExtractor?: EmotionExtractor,
 ): Promise<ChatPipelineResult> {
   const persisted = persistUserMessage(handle, body, now);
-  // T7:记忆客户端注入。undefined = 默认 Python 子进程客户端;null = 显式禁用(测试)。
   const memoryClient = memory === undefined ? createPythonMemoryClient() : memory;
+  const recent = loadRecentWindow(handle, persisted.conversationId, 30);
 
-  // Prompt 注入当前情绪（读时回归后的展示态，§10.11）
+  // 方案 1：聊天前独立抽取情绪 → 落库状态事件（失败降级不产生事件）
+  let stateEvent: ChatStateEventData | null = null;
+  if (isEmotionEngineEnabled()) {
+    try {
+      const extractor = emotionExtractor ?? ((msg, ctx) => extractEmotionViaLlm(handle, msg, ctx));
+      const raw = await extractor(body.message, recent);
+      if (raw) {
+        const extraction = buildExtraction(raw.tag as EmotionTag, raw.intensity, raw.reason);
+        stateEvent = applyStateEvent(handle, {
+          agentId: persisted.agentId,
+          conversationId: persisted.conversationId,
+          triggerMessageId: persisted.messageId,
+          extraction,
+          now,
+        });
+      }
+    } catch {
+      // 抽取失败降级：不阻断聊天
+    }
+  }
+
+  // Prompt 注入当前情绪（含本轮抽取后的展示态）
   const agentRow = handle.db.select().from(agents).where(eq(agents.id, persisted.agentId)).get();
   const emotionLine = agentRow
     ? buildEmotionPromptLine(computeDisplayState(agentRow, now), agentRow.currentTag as EmotionTag)
     : null;
-  let memoryBlock = "";
+  let memoryBlock = '';
   if (memoryClient) {
     try {
       const { topK } = loadMemoryConfig();
       const hits = await memoryClient.search(body.message, topK);
       if (hits.length > 0) {
         memoryBlock = `[相关记忆]
-${hits.map((h) => `- ${h}`).join("\n")}\n\n(以上为历史对话记忆,仅供参考,不要主动提及本列表)`;
+${hits.map((h) => `- ${h}`).join('\n')}\n\n(以上为历史对话记忆,仅供参考,不要主动提及本列表)`;
       }
     } catch {
       // 降级约定:检索失败不阻断对话
@@ -388,11 +416,8 @@ ${hits.map((h) => `- ${h}`).join("\n")}\n\n(以上为历史对话记忆,仅供�
   }
   const systemBase = emotionLine ? `${PERSONA_CORE_MD}\n\n${emotionLine}` : PERSONA_CORE_MD;
   const prompt = {
-    // 协议必须置于最前:置于末尾时模型会无视(见 emotion-llm.ts 注释)
-    system: [buildEmotionInstruction(), systemBase, memoryBlock]
-      .filter((part) => part.length > 0)
-      .join('\n\n'),
-    messages: loadRecentWindow(handle, persisted.conversationId, 30),
+    system: [systemBase, memoryBlock].filter((part) => part.length > 0).join('\n\n'),
+    messages: recent,
   };
 
   let llm: LlmStreamHandle;
@@ -419,9 +444,11 @@ ${hits.map((h) => `- ${h}`).join("\n")}\n\n(以上为历史对话记忆,仅供�
     userMessage: body.message,
     memory: memoryClient,
     llm,
+    stateEvent,
   };
 }
-/** UI 流组装（A 方案）：文本增量流式转发（尾部扣留待剥离情绪标记），流结束后解析情绪、落库并补发状态事件（事件后置于文本）。 */
+
+/** UI 流组装：文本增量直通转发，流开头补发状态事件（已落库）。 */
 export function createChatResponse(
   handle: DbHandle,
   pipeline: ChatPipelineResult,
@@ -429,41 +456,42 @@ export function createChatResponse(
 ): Response {
   const stream = createUIMessageStream({
     execute: async ({ writer }) => {
-      let emittedChars = 0;
-      let tail = '';
-      let lastTextId = 'aiko-tail';
-      // text-end 必须随尾部扣留一起延后:短回复的全部 delta 都在缓冲里,
-      // 若 end 先透传,补发的 delta 会落在已关闭的文本部分上(前端报 missing text part)。
-      const pendingTextEnds: UIMessageChunk[] = [];
+      // 流开头补发状态事件（事件已在 runChatPipeline 落库）
+      if (pipeline.stateEvent) {
+        const e = pipeline.stateEvent;
+        writer.write({
+          type: 'data-agent-state-event',
+          data: { event: {
+            id: e.id,
+            agentId: pipeline.agentId,
+            conversationId: pipeline.conversationId,
+            triggerMessageId: e.triggerMessageId,
+            source: 'user_message',
+            ruleVersion: EMOTION_EXTRACTION_VERSION,
+            before: e.before,
+            delta: e.delta,
+            after: e.after,
+            discreteTag: e.discreteTag,
+            reason: e.reason,
+            evidenceText: e.evidenceText,
+            confidence: e.confidence,
+            createdAt: now,
+          } },
+          id: e.id,
+        });
+      }
+
       try {
+        let streamed = '';
         for await (const chunk of iterateLlmChunks(pipeline.llm.toUimessageStream())) {
           if (chunk.type === 'text-delta') {
-            lastTextId = chunk.id;
-            tail += chunk.delta;
-            // 扣留尾部，防止情绪标记漏进用户可见流
-            if (tail.length > EMOTION_MARKER_MAX_CHARS) {
-              const safe = tail.slice(0, -EMOTION_MARKER_MAX_CHARS);
-              writer.write({ type: 'text-delta', id: chunk.id, delta: safe });
-              emittedChars += safe.length;
-              tail = tail.slice(-EMOTION_MARKER_MAX_CHARS);
-            }
-          } else if (chunk.type === 'text-end') {
-            pendingTextEnds.push(chunk);
-          } else {
-            writer.write(chunk);
+            streamed += chunk.delta;
           }
+          writer.write(chunk);
         }
 
-        const rawText = await pipeline.llm.text;
-        const parsed = parseEmotionMarker(rawText);
-        const content = parsed ? parsed.cleanText : rawText;
-        const rest = content.slice(emittedChars);
-        if (rest) {
-          writer.write({ type: 'text-delta', id: lastTextId, delta: rest });
-        }
-        for (const end of pendingTextEnds) {
-          writer.write(end);
-        }
+        // text 承诺是权威全文;中途失败(拒绝)时走 failed 分支
+        const content = await pipeline.llm.text;
 
         writeAssistantMessage(handle, {
           conversationId: pipeline.conversationId,
@@ -472,36 +500,6 @@ export function createChatResponse(
           content,
           errorCode: null,
         });
-
-        if (parsed?.extraction && isEmotionEngineEnabled()) {
-          const event = applyStateEvent(handle, {
-            agentId: pipeline.agentId,
-            conversationId: pipeline.conversationId,
-            triggerMessageId: pipeline.userMessageId,
-            extraction: parsed.extraction,
-            now,
-          });
-          writer.write({
-            type: 'data-agent-state-event',
-            data: { event: {
-              id: event.id,
-              agentId: pipeline.agentId,
-              conversationId: pipeline.conversationId,
-              triggerMessageId: event.triggerMessageId,
-              source: 'user_message',
-              ruleVersion: EMOTION_EXTRACTION_VERSION,
-              before: event.before,
-              delta: event.delta,
-              after: event.after,
-              discreteTag: event.discreteTag,
-              reason: event.reason,
-              evidenceText: event.evidenceText,
-              confidence: event.confidence,
-              createdAt: now,
-            } },
-            id: event.id,
-          });
-        }
 
         // T7:本轮对话(用户+助手)写入长期记忆;失败不影响响应流。
         if (pipeline.memory) {

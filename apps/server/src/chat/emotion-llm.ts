@@ -1,26 +1,21 @@
 import type { AgentEmotionState, EmotionTag } from '@aiko/shared';
 
 /**
- * LLM 情绪自评抽取(A 方案):
- * 在 system prompt 里约定协议,要求模型在回复末尾追加一行结构化标记,
- * 服务端从完整回复中解析并剥离。替代词典规则引擎(emotion-rules,已删除)。
- *
- * 职责边界:本模块只负责"标记协议 + 解析 + PAD 状态数学",
- * 不感知流式传输(service.ts)、不感知存储(applyStateEvent 也在 service,后续可再拆)。
- * EMOTION_ENGINE=off 时关闭协议:prompt 不注入、解析恒返回 null。
+ * PAD 情绪状态数学模块：
+ * applyEmotion（增量截断 + 状态更新）/ computeTag（离散标签分区）/ clampState。
+ * 情绪抽取已改为聊天前独立 LLM 小调用（emotion-extract.ts），
+ * 不再依赖回复内嵌标记协议。
+ * EMOTION_ENGINE=off 时关闭：不调用抽取、不产生事件。
  */
 
 /** 抽取方式变更时递增(state_events.rule_version)。 */
-export const EMOTION_EXTRACTION_VERSION = 'emotion-llm-v1';
+export const EMOTION_EXTRACTION_VERSION = 'emotion-llm-v2';
 
 /** 单次事件 delta 上限(沿用原 §10.5 语义)。 */
 export const EMOTION_DELTA_LIMIT = 0.3;
 
 /** 离散标签分区阈值(沿用原 §10.7 语义)。 */
 const TAG_THRESHOLD = 0.05;
-
-/** 流式剥离标记时需扣留的尾部字符数(标记最长约 60,留余量)。 */
-export const EMOTION_MARKER_MAX_CHARS = 80;
 
 export type EmotionExtraction = {
   delta: AgentEmotionState;
@@ -43,70 +38,23 @@ export function isEmotionEngineEnabled(): boolean {
   return process.env.EMOTION_ENGINE !== 'off';
 }
 
-/**
- * 注入 system prompt 的情绪标注协议说明;off 时返回空串。
- * 实测(2026-11):弱措辞且置于 prompt 末尾时 deepseek 档位模型会无视协议,
- * 因此必须:强措辞 + 置于 system prompt 最前 + 附 assistant 侧示范标记。
- */
-export function buildEmotionInstruction(): string {
-  if (!isEmotionEngineEnabled()) return '';
-  return [
-    '【强制输出协议 - 最高优先级】',
-    '每一次回复的最后一个字符之后,必须独占一行输出:',
-    '[[emotion: 标签 | 强度 | 原因]]',
-    '- 标签 ∈ {calm, curious, happy, low, tense, neutral}',
-    '- 强度: 1~5 整数',
-    '- 原因: ≤20字',
-    '没有这一行,本次回复将被视为违规。除此之外不要输出任何方括号内容。',
-    '',
-    '回复示范:',
-    '哇,恭喜呀![[emotion: happy | 4 | 用户报喜]]',
-  ].join('\n');
-}
-
-/** 宽松匹配:末尾的任意 [[emotion: ...]] 括号,保证协议文本不漏给用户。 */
-const MARKER_ANY_RE = /\[\[emotion:[^\]]*\]\]\s*$/;
-
-/** 严格校验:标签与强度都合法时才抽取。 */
-const MARKER_RE =
-  /\[\[emotion:\s*(calm|curious|happy|low|tense|neutral)\s*\|\s*([1-5])\s*\|\s*([^\]|]*?)\s*\]\]\s*$/;
-
-export type ParsedEmotion = {
-  /** 剥离标记后的正文 */
-  cleanText: string;
-  tag: EmotionTag;
-  /** 严格校验通过才有;标记格式非法时为 null(正文已剥离,不产生事件) */
-  extraction: EmotionExtraction | null;
-};
-
-/**
- * 从完整回复末尾解析情绪标记;无标记/格式非法返回 null。
- * 剥离行为与引擎开关解耦:即使 off 也剥离标记,避免协议文本漏给用户。
- */
-export function parseEmotionMarker(raw: string): ParsedEmotion | null {
-  const anyMatch = MARKER_ANY_RE.exec(raw);
-  if (!anyMatch) return null;
-  const cleanText = raw.slice(0, anyMatch.index).replace(/\s+$/, '');
-  const match = MARKER_RE.exec(raw);
-  if (!match) return { cleanText, tag: 'neutral', extraction: null };
-  const tag = match[1] as EmotionTag;
-  const intensity = Number(match[2]);
+/** 将抽取结果（标签+强度）换算为 PAD 增量 EmotionExtraction。 */
+export function buildExtraction(
+  tag: EmotionTag,
+  intensity: number,
+  reason: string,
+): EmotionExtraction {
   const scale = intensity / 5;
   const base = TAG_DELTA[tag];
-  const reason = match[3] || `模型自评情绪为 ${tag}`;
   return {
-    cleanText,
-    tag,
-    extraction: {
-      delta: {
-        valence: Number((base.valence * scale).toFixed(4)),
-        arousal: Number((base.arousal * scale).toFixed(4)),
-        dominance: Number((base.dominance * scale).toFixed(4)),
-      },
-      confidence: Number((0.4 + intensity * 0.12).toFixed(2)),
-      evidenceText: `模型自评: ${tag}(${intensity}/5)`,
-      reason,
+    delta: {
+      valence: Number((base.valence * scale).toFixed(4)),
+      arousal: Number((base.arousal * scale).toFixed(4)),
+      dominance: Number((base.dominance * scale).toFixed(4)),
     },
+    confidence: Number((0.4 + intensity * 0.12).toFixed(2)),
+    evidenceText: `模型自评: ${tag}(${intensity}/5)`,
+    reason,
   };
 }
 

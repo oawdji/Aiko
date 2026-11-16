@@ -14,6 +14,7 @@ import {
   LlmRequestFailedError,
   createChatResponse,
   runChatPipeline,
+  type EmotionExtractor,
   type LlmStreamHandle,
 } from '../service';
 
@@ -50,7 +51,12 @@ const baseBody: ChatRequestBody = {
   clientMessageId: 'client_pipe_1',
 };
 
-/** 把 agent 情绪快照归零,让事件数值可精确预测。 */
+/** 抽取器 fake:始终返回 low|5(方案 1 独立抽取,不依赖回复标记)。 */
+const extractLow5: EmotionExtractor = async () => ({ tag: 'low', intensity: 5, reason: '用户很疲惫' });
+
+/** 抽取器 fake:始终返回 null(抽取失败降级)。 */
+const extractNull: EmotionExtractor = async () => null;
+
 function zeroAgentState(nowIso = NOW): void {
   handle.db.update(agents).set({
     currentValence: 0,
@@ -85,22 +91,24 @@ async function readSse(response: Response): Promise<string> {
   return text;
 }
 
-describe('chat pipeline (A 方案:LLM 情绪自评)', () => {
-  it('strips the emotion marker from the reply, persists clean text, emits state event after text', async () => {
+describe('chat pipeline (方案 1:聊天前独立情绪抽取)', () => {
+  it('extraction before reply: state event emitted before text, reply passes through clean', async () => {
     zeroAgentState();
-    const reply = '辛苦啦,早点休息。\n[[emotion: low | 5 | 用户很疲惫]]';
-    const pipeline = await runChatPipeline(handle, baseBody, NOW, () => fakeLlm(reply));
+    const pipeline = await runChatPipeline(
+      handle, baseBody, NOW,
+      () => fakeLlm('辛苦啦,早点休息。'),
+      undefined,
+      extractLow5,
+    );
 
     const response = createChatResponse(handle, pipeline, NOW);
     const sse = await readSse(response);
-    // 标记被剥离,不进入用户可见流
     expect(sse).toContain('辛苦啦,早点休息。');
-    expect(sse).not.toContain('[[emotion');
-    // 事件后置于文本(A 方案:情绪只能来自模型回复)
+    // 事件先于文本(方案 1:情绪在聊天前独立抽取)
     const eventIdx = sse.indexOf('data-agent-state-event');
     const textIdx = sse.indexOf('text-delta');
-    expect(eventIdx).toBeGreaterThan(textIdx);
     expect(eventIdx).toBeGreaterThan(-1);
+    expect(eventIdx).toBeLessThan(textIdx);
 
     const lastAssistant = handle.sqlite
       .prepare("SELECT content, status, error_code FROM messages WHERE conversation_id = 'conv_pipe' AND role = 'assistant' ORDER BY created_at DESC, id DESC LIMIT 1")
@@ -110,56 +118,49 @@ describe('chat pipeline (A 方案:LLM 情绪自评)', () => {
     const event = handle.sqlite
       .prepare('SELECT * FROM state_events WHERE trigger_message_id = ?')
       .get(pipeline.userMessageId) as Record<string, unknown>;
-    expect(event.rule_version).toBe('emotion-llm-v1');
+    expect(event.rule_version).toBe('emotion-llm-v2');
     expect(event.discrete_tag).toBe('low');
     expect(event.source).toBe('user_message');
 
     const agent = handle.db.select().from(agents).where(eq(agents.id, DEFAULT_AGENT_ID)).get()!;
-    // low | 5 → valence -0.3,arousal -0.15
+    // low | 5 → valence -0.3, arousal -0.15, dominance -0.1
     expect(agent.currentTag).toBe('low');
     expect(agent.currentValence).toBeCloseTo(-0.3, 5);
     expect(agent.currentArousal).toBeCloseTo(-0.15, 5);
+    expect(agent.currentDominance).toBeCloseTo(-0.1, 5);
     expect(agent.stateUpdatedAt).toBe(NOW);
   });
 
-  it('emits no state event when reply has no emotion marker', async () => {
+  it('emits no state event when extraction returns null', async () => {
     zeroAgentState();
     const body = { ...baseBody, message: '今天天气不错', clientMessageId: 'client_pipe_2' };
-    const pipeline = await runChatPipeline(handle, body, NOW, () => fakeLlm('是呀'));
+    const pipeline = await runChatPipeline(
+      handle, body, NOW,
+      () => fakeLlm('是呀'),
+      undefined,
+      extractNull,
+    );
 
     const response = createChatResponse(handle, pipeline, NOW);
     const sse = await readSse(response);
     expect(sse).not.toContain('data-agent-state-event');
     expect(sse).toContain('是呀');
 
-    const event = handle.sqlite
-      .prepare('SELECT COUNT(*) AS n FROM state_events WHERE trigger_message_id = ?')
+    const eventCount = handle.sqlite
+      .prepare('SELECT COUNT(*) AS n FROM state_events')
+      .get() as { n: number };
+    const before = handle.sqlite
+      .prepare("SELECT COUNT(*) AS n FROM state_events WHERE trigger_message_id != ?")
       .get(pipeline.userMessageId) as { n: number };
-    expect(event.n).toBe(0);
+    expect(eventCount.n).toBe(before.n);
   });
 
-  it('ignores invalid marker tags (no state event, marker still stripped)', async () => {
-    zeroAgentState();
-    const body = { ...baseBody, clientMessageId: 'client_pipe_bad' };
-    const reply = '好的。\n[[emotion: angry | 3 | 非法标签]]';
-    const pipeline = await runChatPipeline(handle, body, NOW, () => fakeLlm(reply));
-    const sse = await readSse(createChatResponse(handle, pipeline, NOW));
-    expect(sse).not.toContain('data-agent-state-event');
-    expect(sse).toContain('好的。');
-    expect(sse).not.toContain('[[emotion');
-
-    const event = handle.sqlite
-      .prepare('SELECT COUNT(*) AS n FROM state_events WHERE trigger_message_id = ?')
-      .get(pipeline.userMessageId) as { n: number };
-    expect(event.n).toBe(0);
-  });
-
-  it('writes failed assistant placeholder and throws LLM_REQUEST_FAILED when factory fails', async () => {
+  it('throws LLM_REQUEST_FAILED when factory fails', async () => {
     const body = { ...baseBody, clientMessageId: 'client_pipe_3' };
     await expect(
       runChatPipeline(handle, body, NOW, () => {
         throw new LlmRequestFailedError('no key');
-      }),
+      }, undefined, extractNull),
     ).rejects.toBeInstanceOf(LlmRequestFailedError);
 
     const failedCount = handle.sqlite
@@ -168,22 +169,21 @@ describe('chat pipeline (A 方案:LLM 情绪自评)', () => {
     expect(failedCount.n).toBeGreaterThanOrEqual(1);
   });
 
-  it('emotion engine off: marker stripped but no state event and no protocol in prompt', async () => {
+  it('emotion engine off: no extraction, no state event', async () => {
     vi.stubEnv('EMOTION_ENGINE', 'off');
     zeroAgentState();
     const before = handle.db.select().from(agents).where(eq(agents.id, DEFAULT_AGENT_ID)).get()!;
     const body = { ...baseBody, message: '今天好累', clientMessageId: 'client_pipe_off' };
-    let capturedSystem = '';
-    const pipeline = await runChatPipeline(handle, body, NOW, (prompt) => {
-      capturedSystem = prompt.system;
-      return fakeLlm('好的。\n[[emotion: happy | 5 | 气氛不错]]');
-    });
-    expect(capturedSystem).not.toContain('情绪自评协议');
+    const pipeline = await runChatPipeline(
+      handle, body, NOW,
+      () => fakeLlm('好的。'),
+      undefined,
+      extractLow5, // 引擎关时不应该被调用
+    );
 
     const response = createChatResponse(handle, pipeline, NOW);
     const sse = await readSse(response);
     expect(sse).not.toContain('data-agent-state-event');
-    expect(sse).not.toContain('[[emotion');
     expect(sse).toContain('好的。');
 
     const after = handle.db.select().from(agents).where(eq(agents.id, DEFAULT_AGENT_ID)).get()!;
@@ -202,7 +202,7 @@ describe('chat pipeline (A 方案:LLM 情绪自评)', () => {
     const pipeline = await runChatPipeline(handle, body, NOW, () => ({
       text: Promise.reject(new Error('midstream failure')),
       toUimessageStream: () => stream as never,
-    }));
+    }), undefined, extractNull);
 
     const response = createChatResponse(handle, pipeline, NOW);
     await readSse(response);
@@ -216,7 +216,7 @@ describe('chat pipeline (A 方案:LLM 情绪自评)', () => {
   it('applies baseline regression before the new delta and injects the emotion line into the prompt', async () => {
     vi.unstubAllEnvs();
     // 快照 valence 0.4,6 小时前更新(= 一个半程)→ 展示态回归到 0.2;
-    // 回复标记 happy|5 → delta +0.25 → after 0.45
+    // 抽取 low|5 → delta -0.3 → after -0.1
     handle.db.update(agents).set({
       currentValence: 0.4,
       currentArousal: 0,
@@ -233,13 +233,15 @@ describe('chat pipeline (A 方案:LLM 情绪自评)', () => {
       NOW,
       (prompt) => {
         capturedSystem = prompt.system;
-        return fakeLlm('好的。\n[[emotion: happy | 5 | 气氛不错]]');
+        return fakeLlm('好的。');
       },
+      undefined,
+      extractLow5,
     );
 
     expect(capturedSystem).toContain('【当前情绪状态】');
-    expect(capturedSystem).toContain('calm');
-    expect(capturedSystem).toContain('强制输出协议');
+    // 抽取 low|5 已生效:after valence -0.1, arousal -0.15 → tag low
+    expect(capturedSystem).toContain('low');
 
     const sse = await readSse(createChatResponse(handle, pipeline, NOW));
     const eventLine = sse.split('\n').find((l) => l.includes('data-agent-state-event'))!;
@@ -247,13 +249,13 @@ describe('chat pipeline (A 方案:LLM 情绪自评)', () => {
       data: { event: { before: { valence: number }; after: { valence: number } } };
     };
     expect(frame.data.event.before.valence).toBeCloseTo(0.2, 5);
-    expect(frame.data.event.after.valence).toBeCloseTo(0.45, 5);
+    expect(frame.data.event.after.valence).toBeCloseTo(-0.1, 5);
   });
 
-  it('short reply (< marker buffer): deltas still arrive before text-end on the wire', async () => {
+  it('deltas arrive before text-end on the wire', async () => {
     zeroAgentState();
     const body = { ...baseBody, clientMessageId: 'client_pipe_short' };
-    const pipeline = await runChatPipeline(handle, body, NOW, () => fakeLlm('是呀'));
+    const pipeline = await runChatPipeline(handle, body, NOW, () => fakeLlm('是呀'), undefined, extractNull);
     const sse = await readSse(createChatResponse(handle, pipeline, NOW));
     const types = sse.split('\n')
       .filter((l) => l.startsWith('data: ') && !l.includes('[DONE]'))
