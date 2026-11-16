@@ -387,7 +387,8 @@ ${hits.map((h) => `- ${h}`).join("\n")}\n\n(以上为历史对话记忆,仅供�
   }
   const systemBase = emotionLine ? `${PERSONA_CORE_MD}\n\n${emotionLine}` : PERSONA_CORE_MD;
   const prompt = {
-    system: [systemBase, memoryBlock, buildEmotionInstruction()]
+    // 协议必须置于最前:置于末尾时模型会无视(见 emotion-llm.ts 注释)
+    system: [buildEmotionInstruction(), systemBase, memoryBlock]
       .filter((part) => part.length > 0)
       .join('\n\n'),
     messages: loadRecentWindow(handle, persisted.conversationId, 30),

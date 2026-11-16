@@ -239,7 +239,7 @@ describe('chat pipeline (A 方案:LLM 情绪自评)', () => {
 
     expect(capturedSystem).toContain('【当前情绪状态】');
     expect(capturedSystem).toContain('calm');
-    expect(capturedSystem).toContain('情绪自评协议');
+    expect(capturedSystem).toContain('强制输出协议');
 
     const sse = await readSse(createChatResponse(handle, pipeline, NOW));
     const eventLine = sse.split('\n').find((l) => l.includes('data-agent-state-event'))!;

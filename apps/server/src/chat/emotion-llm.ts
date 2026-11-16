@@ -43,17 +43,24 @@ export function isEmotionEngineEnabled(): boolean {
   return process.env.EMOTION_ENGINE !== 'off';
 }
 
-/** 注入 system prompt 的情绪标注协议说明;off 时返回空串。 */
+/**
+ * 注入 system prompt 的情绪标注协议说明;off 时返回空串。
+ * 实测(2026-11):弱措辞且置于 prompt 末尾时 deepseek 档位模型会无视协议,
+ * 因此必须:强措辞 + 置于 system prompt 最前 + 附 assistant 侧示范标记。
+ */
 export function buildEmotionInstruction(): string {
   if (!isEmotionEngineEnabled()) return '';
   return [
-    '【情绪自评协议(系统要求,对用户不可见)】',
-    '回复正文结束后,必须在最后一行追加情绪自评标记,格式严格为:',
+    '【强制输出协议 - 最高优先级】',
+    '每一次回复的最后一个字符之后,必须独占一行输出:',
     '[[emotion: 标签 | 强度 | 原因]]',
-    '标签只能取: calm / curious / happy / low / tense / neutral;',
-    '强度为 1-5 的整数; 原因为不超过 20 字的短语,可以为空。',
-    '示例: [[emotion: happy | 3 | 聊到喜欢的事]]',
-    '标记行不算回复内容,用户不应看到它。',
+    '- 标签 ∈ {calm, curious, happy, low, tense, neutral}',
+    '- 强度: 1~5 整数',
+    '- 原因: ≤20字',
+    '没有这一行,本次回复将被视为违规。除此之外不要输出任何方括号内容。',
+    '',
+    '回复示范:',
+    '哇,恭喜呀![[emotion: happy | 4 | 用户报喜]]',
   ].join('\n');
 }
 
