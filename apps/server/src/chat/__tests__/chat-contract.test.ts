@@ -65,7 +65,7 @@ async function readSse(response: Response): Promise<string[]> {
 
 describe('chat SSE wire format (api-contract.md §13.6/§13.7, Phase 0 实测记录)', () => {
   it('emits only data: frames; data part carries id equal to state event id', async () => {
-    const pipeline = await runChatPipeline(handle, body, NOW, () => fakeLlm('好好休息。'));
+    const pipeline = await runChatPipeline(handle, body, NOW, () => fakeLlm('好好休息。\n[[emotion: calm | 2 | 轻松]]'));
     const response = createChatResponse(handle, pipeline, NOW);
 
     expect(response.headers.get('content-type')).toContain('text/event-stream');
@@ -89,10 +89,10 @@ describe('chat SSE wire format (api-contract.md §13.6/§13.7, Phase 0 实测记
     expect(deltaFrame).toBeDefined();
     expect(deltaFrame.delta).toBe('好好休息。');
 
-    // 顺序：data part 帧在首个 text-delta 帧之前（Phase 0 实测记录 #4）
+    // 顺序（A 方案）：情绪只能来自模型回复，data part 帧在最后一个 text-delta 帧之后
     const eventIdx = parsed.findIndex((p) => p.type === 'data-agent-state-event');
-    const deltaIdx = parsed.findIndex((p) => p.type === 'text-delta');
-    expect(eventIdx).toBeLessThan(deltaIdx);
+    const deltaIdx = parsed.map((p) => p.type).lastIndexOf('text-delta');
+    expect(eventIdx).toBeGreaterThan(deltaIdx);
   });
 });
 

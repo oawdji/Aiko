@@ -9,7 +9,8 @@ import { createDb, type DbHandle } from '../../db/client';
 import { runMigrations } from '../../db/migrate';
 import { seedDefaultData } from '../../db/seed';
 import { conversations } from '../../db/schema';
-import { createChatResponse, runChatPipeline, type LlmStreamHandle, type MemoryClient } from '../service';
+import { createChatResponse, runChatPipeline, type LlmStreamHandle } from '../service';
+import type { MemoryClient } from '../memory-client';
 
 const migrationsFolder = path.resolve(import.meta.dirname, '../../../drizzle');
 const NOW = '2026-11-14T00:00:00.000Z';
@@ -51,7 +52,7 @@ function capturingLlm(captured: { system: string }): LlmStreamHandle {
   return {
     text: Promise.resolve('好的'),
     toUimessageStream: () =>
-      createUIMessageStream({ execute: ({ w }) => w.write({ type: 'text-delta', id: 'f', delta: '好的' }) }) as never,
+      createUIMessageStream({ execute: ({ writer: w }) => w.write({ type: 'text-delta', id: 'f', delta: '好的' }) }) as never,
   };
 }
 
@@ -112,7 +113,7 @@ describe('chat pipeline memory integration (T7)', () => {
     };
     void capturingLlm;
 
-    const pipeline = await runChatPipeline(handle, baseBody, NOW, factory, undefined, client);
+    const pipeline = await runChatPipeline(handle, baseBody, NOW, factory, client);
     expect(searchCalls).toEqual(['我家宠物叫什么?']);
     expect(capturedSystem).toContain('[相关记忆]');
     expect(capturedSystem).toContain('咪咪');
@@ -137,7 +138,6 @@ describe('chat pipeline memory integration (T7)', () => {
       { ...baseBody, clientMessageId: 'client_mem_2' },
       NOW,
       () => fakeLlm('没关系'),
-      undefined,
       failing,
     );
     const sse = await readSse(createChatResponse(handle, pipeline, NOW));
@@ -159,7 +159,6 @@ describe('chat pipeline memory integration (T7)', () => {
       { ...baseBody, clientMessageId: 'client_mem_3' },
       NOW,
       () => fakeLlm('ok'),
-      undefined,
       null,
     );
     void pipeline;

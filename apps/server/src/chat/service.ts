@@ -18,12 +18,22 @@ import type { DbHandle } from '../db/client';
 import { PERSONA_CORE_MD } from '../db/generated/persona-core';
 import { agents, conversations, messages, stateEvents } from '../db/schema';
 import { type PromptMessage } from './recent-window';
-import { EMOTION_RULES_VERSION, applyEmotion, computeTag, type EmotionExtraction } from './emotion-rules';
-import { defaultEmotionEngine, type EmotionEngine } from './emotion-engine';
+import {
+  EMOTION_EXTRACTION_VERSION,
+  EMOTION_MARKER_MAX_CHARS,
+  applyEmotion,
+  buildEmotionInstruction,
+  computeTag,
+  isEmotionEngineEnabled,
+  parseEmotionMarker,
+  type EmotionExtraction,
+} from './emotion-llm';
 import { computeDisplayState, resolveDecayConfig, revertToBaseline } from './emotion-decay';
 import { buildEmotionPromptLine } from './emotion-prompt';
 import { loadMemoryConfig } from '../config/memory';
 import { createPythonMemoryClient, type MemoryClient } from './memory-client';
+
+export type { MemoryClient };
 
 export class ChatAgentNotFoundError extends Error {
   constructor(agentRef: string) {
@@ -80,7 +90,6 @@ export type ChatPipelineResult = {
   conversationId: string;
   userMessageId: string;
   userMessage: string;
-  stateEvent: ChatStateEventData | null;
   memory: MemoryClient | null;
   llm: LlmStreamHandle;
 };
@@ -226,7 +235,7 @@ export function applyStateEvent(
         conversationId: params.conversationId,
         triggerMessageId: params.triggerMessageId,
         source: 'user_message',
-        ruleVersion: EMOTION_RULES_VERSION,
+        ruleVersion: EMOTION_EXTRACTION_VERSION,
         beforeValence: before.valence,
         beforeArousal: before.arousal,
         deltaValence: delta.valence,
@@ -352,23 +361,11 @@ export async function runChatPipeline(
   body: ChatRequestBody,
   now: string,
   llmFactory?: LlmStreamFactory,
-  emotionEngine: EmotionEngine = defaultEmotionEngine,
   memory?: MemoryClient | null,
 ): Promise<ChatPipelineResult> {
   const persisted = persistUserMessage(handle, body, now);
   // T7:记忆客户端注入。undefined = 默认 Python 子进程客户端;null = 显式禁用(测试)。
   const memoryClient = memory === undefined ? createPythonMemoryClient() : memory;
-
-  const extraction = emotionEngine(body.message);
-  const stateEvent = extraction
-    ? applyStateEvent(handle, {
-        agentId: persisted.agentId,
-        conversationId: persisted.conversationId,
-        triggerMessageId: persisted.messageId,
-        extraction,
-        now,
-      })
-    : null;
 
   // Prompt 注入当前情绪（读时回归后的展示态，§10.11）
   const agentRow = handle.db.select().from(agents).where(eq(agents.id, persisted.agentId)).get();
@@ -390,7 +387,9 @@ ${hits.map((h) => `- ${h}`).join("\n")}\n\n(以上为历史对话记忆,仅供�
   }
   const systemBase = emotionLine ? `${PERSONA_CORE_MD}\n\n${emotionLine}` : PERSONA_CORE_MD;
   const prompt = {
-    system: memoryBlock ? `${systemBase}\n\n${memoryBlock}` : systemBase,
+    system: [systemBase, memoryBlock, buildEmotionInstruction()]
+      .filter((part) => part.length > 0)
+      .join('\n\n'),
     messages: loadRecentWindow(handle, persisted.conversationId, 30),
   };
 
@@ -416,12 +415,11 @@ ${hits.map((h) => `- ${h}`).join("\n")}\n\n(以上为历史对话记忆,仅供�
     conversationId: persisted.conversationId,
     userMessageId: persisted.messageId,
     userMessage: body.message,
-    stateEvent,
     memory: memoryClient,
     llm,
   };
 }
-/** UI 流组装：状态事件 data part 先于文本增量（Phase 0 锁定顺序），结束后 assistant 落库。 */
+/** UI 流组装（A 方案）：文本增量流式转发（尾部扣留待剥离情绪标记），流结束后解析情绪、落库并补发状态事件（事件后置于文本）。 */
 export function createChatResponse(
   handle: DbHandle,
   pipeline: ChatPipelineResult,
@@ -429,33 +427,34 @@ export function createChatResponse(
 ): Response {
   const stream = createUIMessageStream({
     execute: async ({ writer }) => {
-      if (pipeline.stateEvent) {
-        writer.write({
-          type: 'data-agent-state-event',
-          data: { event: {
-            id: pipeline.stateEvent.id,
-            agentId: pipeline.agentId,
-            conversationId: pipeline.conversationId,
-            triggerMessageId: pipeline.stateEvent.triggerMessageId,
-            source: 'user_message',
-            ruleVersion: EMOTION_RULES_VERSION,
-            before: pipeline.stateEvent.before,
-            delta: pipeline.stateEvent.delta,
-            after: pipeline.stateEvent.after,
-            discreteTag: pipeline.stateEvent.discreteTag,
-            reason: pipeline.stateEvent.reason,
-            evidenceText: pipeline.stateEvent.evidenceText,
-            confidence: pipeline.stateEvent.confidence,
-            createdAt: now,
-          } },
-          id: pipeline.stateEvent.id,
-        });
-      }
-
-      writer.merge(pipeline.llm.toUimessageStream() as Parameters<typeof writer.merge>[0]);
-
+      let emittedChars = 0;
+      let tail = '';
+      let lastTextId = 'aiko-tail';
       try {
-        const content = await pipeline.llm.text;
+        for await (const chunk of iterateLlmChunks(pipeline.llm.toUimessageStream())) {
+          if (chunk.type === 'text-delta') {
+            lastTextId = chunk.id;
+            tail += chunk.delta;
+            // 扣留尾部，防止情绪标记漏进用户可见流
+            if (tail.length > EMOTION_MARKER_MAX_CHARS) {
+              const safe = tail.slice(0, -EMOTION_MARKER_MAX_CHARS);
+              writer.write({ type: 'text-delta', id: chunk.id, delta: safe });
+              emittedChars += safe.length;
+              tail = tail.slice(-EMOTION_MARKER_MAX_CHARS);
+            }
+          } else {
+            writer.write(chunk);
+          }
+        }
+
+        const rawText = await pipeline.llm.text;
+        const parsed = parseEmotionMarker(rawText);
+        const content = parsed ? parsed.cleanText : rawText;
+        const rest = content.slice(emittedChars);
+        if (rest) {
+          writer.write({ type: 'text-delta', id: lastTextId, delta: rest });
+        }
+
         writeAssistantMessage(handle, {
           conversationId: pipeline.conversationId,
           agentId: pipeline.agentId,
@@ -463,15 +462,46 @@ export function createChatResponse(
           content,
           errorCode: null,
         });
+
+        if (parsed?.extraction && isEmotionEngineEnabled()) {
+          const event = applyStateEvent(handle, {
+            agentId: pipeline.agentId,
+            conversationId: pipeline.conversationId,
+            triggerMessageId: pipeline.userMessageId,
+            extraction: parsed.extraction,
+            now,
+          });
+          writer.write({
+            type: 'data-agent-state-event',
+            data: { event: {
+              id: event.id,
+              agentId: pipeline.agentId,
+              conversationId: pipeline.conversationId,
+              triggerMessageId: event.triggerMessageId,
+              source: 'user_message',
+              ruleVersion: EMOTION_EXTRACTION_VERSION,
+              before: event.before,
+              delta: event.delta,
+              after: event.after,
+              discreteTag: event.discreteTag,
+              reason: event.reason,
+              evidenceText: event.evidenceText,
+              confidence: event.confidence,
+              createdAt: now,
+            } },
+            id: event.id,
+          });
+        }
+
         // T7:本轮对话(用户+助手)写入长期记忆;失败不影响响应流。
         if (pipeline.memory) {
           try {
             await pipeline.memory.indexDialogue([
-              { role: "user", content: pipeline.userMessage },
-              { role: "assistant", content },
+              { role: 'user', content: pipeline.userMessage },
+              { role: 'assistant', content },
             ]);
           } catch (error) {
-            console.warn("[memory] index failed (degraded):", error instanceof Error ? error.message : error);
+            console.warn('[memory] index failed (degraded):', error instanceof Error ? error.message : error);
           }
         }
       } catch {
@@ -489,17 +519,31 @@ export function createChatResponse(
   return createUIMessageStreamResponse({ stream });
 }
 
+async function* iterateLlmChunks(
+  stream: ReadableStream<UIMessageChunk> | AsyncIterable<UIMessageChunk>,
+): AsyncGenerator<UIMessageChunk> {
+  if (Symbol.asyncIterator in stream) {
+    yield* stream as AsyncIterable<UIMessageChunk>;
+    return;
+  }
+  const reader = (stream as ReadableStream<UIMessageChunk>).getReader();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    yield value;
+  }
+}
+
 /** 聊天编排入口：route 只负责校验与错误映射。 */
 export async function handleChatRequest(
   deps: {
     body: ChatRequestBody;
     llmFactory?: LlmStreamFactory;
-    emotionEngine?: EmotionEngine;
     memoryClient?: MemoryClient | null;
   },
   handle: DbHandle,
   now: string,
 ): Promise<Response> {
-  const pipeline = await runChatPipeline(handle, deps.body, now, deps.llmFactory, deps.emotionEngine, deps.memoryClient);
+  const pipeline = await runChatPipeline(handle, deps.body, now, deps.llmFactory, deps.memoryClient);
   return createChatResponse(handle, pipeline, now);
 }

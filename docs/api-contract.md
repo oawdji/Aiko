@@ -588,7 +588,7 @@ export type BootstrapResponse = {
     "conversationId": "conv_018f6d2e-8fb4-7a1e-9f0f-4c1f7a9d0002",
     "triggerMessageId": "msg_018f6d2e-8fb4-7a1e-9f0f-4c1f7a9d0001",
     "source": "user_message",
-    "ruleVersion": "emotion-rules-v2",
+    "ruleVersion": "emotion-llm-v1",
     "before": {
       "valence": 0.03,
       "arousal": 0.01,
@@ -1011,7 +1011,7 @@ export type AgentStateEventData = {
       "conversationId": "conv_018f6d2e-8fb4-7a1e-9f0f-4c1f7a9d0002",
       "triggerMessageId": "msg_018f6d2e-8fb4-7a1e-9f0f-4c1f7a9d0001",
       "source": "user_message",
-      "ruleVersion": "emotion-rules-v2",
+      "ruleVersion": "emotion-llm-v1",
       "before": {
         "valence": 0.03,
         "arousal": 0.01,
@@ -1042,7 +1042,7 @@ export type AgentStateEventData = {
 > 1. 传输格式为 SSE（`Content-Type: text/event-stream`），每帧形如 `data: {...}`；
 > 2. 自定义数据 part 实际线格式：`{"type":"data-agent-state-event","data":{...},"id":"state_xxx"}`；
 > 3. 文本增量 part 使用 `delta` 字段：`{"type":"text-delta","id":"...","delta":"..."}`（v5 为 `text`，v7 已改名）；
-> 4. 写入顺序可控：先写 data part 再写 text-delta，前端按相同顺序接收；
+> 4. 写入顺序（emotion-llm-v1 起）：情绪事件来自模型回复末尾的自评标记，故先写 text-delta 再写 data part，前端按相同顺序接收；
 > 5. 服务端 `createUIMessageStream` 返回 `ReadableStream`，需用 `createUIMessageStreamResponse({ stream })` 构造响应；
 > 6. 前端通过 `useChat` 的 `message.parts` 读取数据 part（`type === 'data-agent-state-event'`），`stop()` 中断流可用；
 > 7. 以上结论经 mock 端点、单元测试与浏览器验证；DeepSeek 真实端点行为已于 2026-11-12 经 M3 冒烟实测补充确认（见下）。
@@ -1052,7 +1052,7 @@ export type AgentStateEventData = {
 >
 > 1. **流式输出**：200 + `text/event-stream`，文本增量经 `DefaultChatTransport` 正常接收。期间发现并修复：AI SDK 标准 payload（`{id, messages, trigger, messageId}`）与 §13.1 扁平契约体不一致，需在 `prepareSendMessagesRequest` 中映射（`clientMessageId` 取 AI SDK 消息 id，天然满足 §14 幂等语义）；
 > 2. **刷新恢复顺序**：发现并修复同毫秒消息乱序——一轮对话 user/assistant 曾共用同一 `createdAt` 且 tie-break 为随机 UUID id；现 assistant 落库使用完成时刻时间戳，bootstrap/会话分页 tie-break 改为 `rowid`（插入序），并有回归测试锁定；
-> 3. **情绪状态事件**：含情绪词消息触发 data part 先于文本到达，状态面板同步更新；`EMOTION_ENGINE=off` 可整体关闭（不产生事件、不更新快照）；
+> 3. **情绪状态事件**：模型回复末尾带合法自评标记时，文本流结束后发送 data part，状态面板同步更新；`EMOTION_ENGINE=off` 可整体关闭（不注入协议、不产生事件、不更新快照）；
 > 4. **多轮上下文**：追问可正确引用前文（DB 近期窗口 30 条）；
 > 5. **停止生成**：中断可用，失败占位按 §15 落库；
 > 6. **幂等（§14）**：同一 `clientMessageId` 二次提交实测返回 `409 DUPLICATE_CLIENT_MESSAGE` + `details.existingMessageId`，库内仅一条 user 消息；409 后前端经 `GET /api/conversations/:id` 刷新，不重试同一 id；
