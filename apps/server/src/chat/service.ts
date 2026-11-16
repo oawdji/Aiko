@@ -254,6 +254,7 @@ export function applyStateEvent(
       .set({
         currentValence: after.valence,
         currentArousal: after.arousal,
+        currentDominance: after.dominance,
         currentTag: discreteTag,
         stateUpdatedAt: params.now,
         updatedAt: params.now,
