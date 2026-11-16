@@ -14,7 +14,7 @@ export function DevChecklist() {
   return (
     <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-4">
       <h2 className="mb-2 text-sm font-semibold">联调清单</h2>
-      <ul className="list-inside list-disc space-y-1 text-xs text-neutral-400">
+      <ul className="list-inside list-disc space-y-1 break-words text-xs text-neutral-400">
         {ITEMS.map((item) => (
           <li key={item}>{item}</li>
         ))}

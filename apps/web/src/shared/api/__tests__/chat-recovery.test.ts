@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClientError } from '../errors';
-import { fetchBootstrap, fetchConversation } from '../chat-recovery';
+import { fetchBootstrap, fetchConversation, fetchConversationList } from '../chat-recovery';
 
 const okBootstrap = {
   user: { id: 'local-user' },
@@ -56,6 +56,17 @@ describe('web API client (M2.4)', () => {
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/bootstrap?agent=default',
       expect.objectContaining({ headers: { Accept: 'application/json' } }),
+    );
+  });
+
+  it('lists conversations for an agent', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ items: [] }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await fetchConversationList('agent-default');
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/conversations?agentId=agent-default',
+      expect.anything(),
     );
   });
 

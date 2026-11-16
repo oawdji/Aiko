@@ -58,6 +58,19 @@ export const ConversationDTOSchema = z.object({
   updatedAt: IsoDateTimeSchema,
 });
 
+/** 历史列表中的一条会话。preview 是首条用户消息的短摘要，没有则为 null。 */
+export const ConversationListItemSchema = ConversationDTOSchema.extend({
+  preview: z.string().min(1).nullable(),
+});
+
+export const ConversationListQuerySchema = z.object({
+  agentId: z.string().min(1).optional(),
+});
+
+export const ConversationListResponseSchema = z.object({
+  items: z.array(ConversationListItemSchema),
+});
+
 export const AgentDTOSchema = z.object({
   id: z.string().min(1),
   slug: z.string().min(1),
@@ -284,6 +297,8 @@ export const LlmConnectionTestResponseSchema = z.object({
 
 export type ChatMessageDTO = z.infer<typeof ChatMessageDTOSchema>;
 export type ConversationDTO = z.infer<typeof ConversationDTOSchema>;
+export type ConversationListItem = z.infer<typeof ConversationListItemSchema>;
+export type ConversationListResponse = z.infer<typeof ConversationListResponseSchema>;
 export type AgentDTO = z.infer<typeof AgentDTOSchema>;
 export type AgentStateEvent = z.infer<typeof AgentStateEventSchema>;
 export type AppSettings = z.infer<typeof AppSettingsSchema>;

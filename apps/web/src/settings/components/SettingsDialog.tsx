@@ -87,15 +87,20 @@ export function SettingsDialog({ open, settings, onSaved, onClose }: Props) {
   return (
     <div
       aria-label="LLM 设置"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center sm:p-4"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md space-y-4 rounded-xl border border-neutral-800 bg-neutral-900 p-6 text-neutral-100"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="llm-settings-title"
+        className="max-h-[92dvh] w-full space-y-4 overflow-y-auto rounded-t-2xl border border-neutral-800 bg-neutral-900 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-neutral-100 sm:max-w-md sm:rounded-xl sm:p-6"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">LLM 设置</h2>
+          <h2 id="llm-settings-title" className="text-lg font-semibold">
+            LLM 设置
+          </h2>
           <button
             type="button"
             aria-label="关闭设置"
@@ -161,12 +166,12 @@ export function SettingsDialog({ open, settings, onSaved, onClose }: Props) {
           </p>
         )}
 
-        <div className="flex justify-between gap-2 pt-1">
+        <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center sm:justify-between">
           <button
             type="button"
             onClick={handleTest}
             disabled={testing || saving}
-            className="rounded-lg border border-neutral-700 px-4 py-2 text-sm text-neutral-300 hover:bg-neutral-800 disabled:opacity-50"
+            className="rounded-lg border border-neutral-700 px-4 py-2.5 text-sm text-neutral-300 hover:bg-neutral-800 disabled:opacity-50 sm:py-2"
           >
             {testing ? '测试中…' : '测试连接'}
           </button>
@@ -174,7 +179,7 @@ export function SettingsDialog({ open, settings, onSaved, onClose }: Props) {
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg px-4 py-2 text-sm text-neutral-400 hover:bg-neutral-800"
+              className="flex-1 rounded-lg px-4 py-2.5 text-sm text-neutral-400 hover:bg-neutral-800 sm:flex-none sm:py-2"
             >
               关闭
             </button>
@@ -182,7 +187,7 @@ export function SettingsDialog({ open, settings, onSaved, onClose }: Props) {
               type="button"
               onClick={handleSave}
               disabled={saving || testing}
-              className="rounded-lg bg-sky-500 px-4 py-2 text-sm font-medium text-neutral-950 hover:bg-sky-400 disabled:opacity-50"
+              className="flex-1 rounded-lg bg-sky-500 px-4 py-2.5 text-sm font-medium text-neutral-950 hover:bg-sky-400 disabled:opacity-50 sm:flex-none sm:py-2"
             >
               {saving ? '保存中…' : '保存'}
             </button>

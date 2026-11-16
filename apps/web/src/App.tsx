@@ -14,7 +14,7 @@ export default function App() {
     return (
       <main
         aria-label="启动中"
-        className="flex min-h-screen items-center justify-center bg-neutral-950 text-neutral-300"
+        className="flex h-dvh items-center justify-center bg-neutral-950 px-4 text-neutral-300"
       >
         <div className="flex flex-col items-center gap-3">
           <div
@@ -31,7 +31,7 @@ export default function App() {
     return (
       <main
         aria-label="启动失败"
-        className="flex min-h-screen items-center justify-center bg-neutral-950 p-6 text-neutral-200"
+        className="flex h-dvh items-center justify-center bg-neutral-950 p-4 text-neutral-200 sm:p-6"
       >
         <div className="w-full max-w-md space-y-4 rounded-xl border border-neutral-800 bg-neutral-900 p-6 text-center">
           <h1 className="text-lg font-semibold">会话恢复失败</h1>
