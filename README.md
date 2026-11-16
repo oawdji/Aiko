@@ -21,9 +21,9 @@ Aiko 是一个运行在本地的拟人化聊天 Agent。她不是“带聊天框
 | 文档设计 | 需求 / 技术设计 / API 契约 / 数据库 / React 架构 / 人格锚点 / LLM 连接设置 | ✅ 完成 |
 | Phase 0 | 项目骨架、LLM 层、流式协议、恢复注入、上下文窗口 | ✅ 完成（DeepSeek 已实测确认） |
 | Phase 1（MVP） | 消息持久化、会话恢复、状态引擎 | ✅ M1 / M2 / M3 完成，六项冒烟全过 |
-| M4 | PAD 三维情绪、OU 时间衰减引擎、角色级衰减参数、prompt 情绪注入 | ✅ 后端完成；情绪面板打磨（T7）进行中 |
-| Phase 2 | 长期记忆与透明性 | ⬜ 未开始 |
-| Phase 3 | 语义检索（本地 bge-base-zh + SQLite 向量）后端全链路 | 🚨 检索模块完成（T1–T8）；受控人格演化未开始 |
+| M4 | PAD 三维情绪、OU 时间衰减引擎、角色级衰减参数、prompt 情绪注入 | ✅ 完成（后端引擎 + 前端状态面板） |
+| Phase 2 | 长期记忆与透明性 | 🔶 语义记忆已随 Phase 3 落地；记忆管理 UI 与遗忘未开始 |
+| Phase 3 | 语义检索（本地 bge-base-zh + SQLite 向量）后端全链路 | ✅ 检索模块完成（T1–T8）；受控人格演化未开始 |
 | Phase 4 | 主动行为与遗忘 | ⬜ 未开始 |
 
 ## 功能一览
@@ -105,7 +105,7 @@ pnpm dev
 pnpm dev:server
 pnpm dev:web
 
-pnpm test          # 全部测试（165 个）
+pnpm test          # 全部测试（163 个）
 pnpm lint          # ESLint
 pnpm gen:persona   # 从 docs/persona-core-v1.md 重新生成锚点模块
 ```
