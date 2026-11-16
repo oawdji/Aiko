@@ -89,7 +89,7 @@
 
 ### T7: 接入现有记忆/对话管道(改造点,唯一动旧代码的任务)
 
-- **修改文件**: 现有对话主循环或记忆管理模块(具体文件名待按 monorepo 结构确认)
+- **修改文件**: pps/server/src/chat/service.ts(已完成)+ 新增 pps/server/src/chat/memory-client.ts、services/retrieval/cli.py(Python 子进程粘合层)
 - **内容边界**:
   - 每轮对话结束后调用 `index()` 写入记忆(一次调用 + 一个组装 metadata 的小函数)
   - 构造 prompt 时调用 `search()` 取 topK 注入上下文
@@ -122,6 +122,7 @@ T1(接口) ──► T2 / T3 / T4(三个独立组件,可并行)
 
 1. 具体文件路径按 monorepo 实际包结构落位(`apps/` 下哪个应用承载对话管道、`packages/` 下是否新建 `memory` 包)。
 2. ~~推理进程语言~~ 已定:Python(sentence-transformers)独立模块(services/embedding/),TS 主应用后续经本地 HTTP 调用,保持 T2 边界。
+
 
 
 

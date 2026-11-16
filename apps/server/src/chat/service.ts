@@ -22,6 +22,8 @@ import { EMOTION_RULES_VERSION, applyEmotion, computeTag, type EmotionExtraction
 import { defaultEmotionEngine, type EmotionEngine } from './emotion-engine';
 import { computeDisplayState, resolveDecayConfig, revertToBaseline } from './emotion-decay';
 import { buildEmotionPromptLine } from './emotion-prompt';
+import { loadMemoryConfig } from '../config/memory';
+import { createPythonMemoryClient, type MemoryClient } from './memory-client';
 
 export class ChatAgentNotFoundError extends Error {
   constructor(agentRef: string) {
@@ -77,7 +79,9 @@ export type ChatPipelineResult = {
   agentId: string;
   conversationId: string;
   userMessageId: string;
+  userMessage: string;
   stateEvent: ChatStateEventData | null;
+  memory: MemoryClient | null;
   llm: LlmStreamHandle;
 };
 
@@ -349,8 +353,11 @@ export async function runChatPipeline(
   now: string,
   llmFactory?: LlmStreamFactory,
   emotionEngine: EmotionEngine = defaultEmotionEngine,
+  memory?: MemoryClient | null,
 ): Promise<ChatPipelineResult> {
   const persisted = persistUserMessage(handle, body, now);
+  // T7:记忆客户端注入。undefined = 默认 Python 子进程客户端;null = 显式禁用(测试)。
+  const memoryClient = memory === undefined ? createPythonMemoryClient() : memory;
 
   const extraction = emotionEngine(body.message);
   const stateEvent = extraction
@@ -368,8 +375,22 @@ export async function runChatPipeline(
   const emotionLine = agentRow
     ? buildEmotionPromptLine(computeDisplayState(agentRow, now), agentRow.currentTag as EmotionTag)
     : null;
+  let memoryBlock = "";
+  if (memoryClient) {
+    try {
+      const { topK } = loadMemoryConfig();
+      const hits = await memoryClient.search(body.message, topK);
+      if (hits.length > 0) {
+        memoryBlock = `[相关记忆]
+${hits.map((h) => `- ${h}`).join("\n")}\n\n(以上为历史对话记忆,仅供参考,不要主动提及本列表)`;
+      }
+    } catch {
+      // 降级约定:检索失败不阻断对话
+    }
+  }
+  const systemBase = emotionLine ? `${PERSONA_CORE_MD}\n\n${emotionLine}` : PERSONA_CORE_MD;
   const prompt = {
-    system: emotionLine ? `${PERSONA_CORE_MD}\n\n${emotionLine}` : PERSONA_CORE_MD,
+    system: memoryBlock ? `${systemBase}\n\n${memoryBlock}` : systemBase,
     messages: loadRecentWindow(handle, persisted.conversationId, 30),
   };
 
@@ -394,7 +415,9 @@ export async function runChatPipeline(
     agentId: persisted.agentId,
     conversationId: persisted.conversationId,
     userMessageId: persisted.messageId,
+    userMessage: body.message,
     stateEvent,
+    memory: memoryClient,
     llm,
   };
 }
@@ -440,6 +463,17 @@ export function createChatResponse(
           content,
           errorCode: null,
         });
+        // T7:本轮对话(用户+助手)写入长期记忆;失败不影响响应流。
+        if (pipeline.memory) {
+          try {
+            await pipeline.memory.indexDialogue([
+              { role: "user", content: pipeline.userMessage },
+              { role: "assistant", content },
+            ]);
+          } catch (error) {
+            console.warn("[memory] index failed (degraded):", error instanceof Error ? error.message : error);
+          }
+        }
       } catch {
         writeAssistantMessage(handle, {
           conversationId: pipeline.conversationId,
@@ -461,10 +495,11 @@ export async function handleChatRequest(
     body: ChatRequestBody;
     llmFactory?: LlmStreamFactory;
     emotionEngine?: EmotionEngine;
+    memoryClient?: MemoryClient | null;
   },
   handle: DbHandle,
   now: string,
 ): Promise<Response> {
-  const pipeline = await runChatPipeline(handle, deps.body, now, deps.llmFactory, deps.emotionEngine);
+  const pipeline = await runChatPipeline(handle, deps.body, now, deps.llmFactory, deps.emotionEngine, deps.memoryClient);
   return createChatResponse(handle, pipeline, now);
 }
