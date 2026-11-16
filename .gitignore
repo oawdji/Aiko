@@ -17,3 +17,6 @@ build/
 .DS_Store
 Thumbs.db
 docs/参考.md
+
+# python venv
+.venv/
