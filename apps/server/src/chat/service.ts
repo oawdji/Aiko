@@ -31,6 +31,12 @@ import { computeDisplayState, resolveDecayConfig, revertToBaseline } from './emo
 import { buildEmotionPromptLine } from './emotion-prompt';
 import { loadMemoryConfig } from '../config/memory';
 import { createPythonMemoryClient, type MemoryClient } from './memory-client';
+import { createDefaultExtractComplete, scheduleFactExtraction } from '../extraction/pipeline';
+import { searchMemories, updateLastAccessed } from '../memories/retrieval';
+import { maybeTriggerSummary, reconsolidateHits, runSummaryTask } from '../memories/lifecycle';
+import { isDebugModeEnabled } from '../settings/service';
+import { promptSnapshots } from '../db/schema';
+import type { CompleteFn } from '../extraction/types';
 
 export type { MemoryClient };
 
@@ -93,6 +99,8 @@ export type ChatPipelineResult = {
   llm: LlmStreamHandle;
   /** 聊天前独立抽取已落库的状态事件（可能为 null = 引擎关/抽取失败降级）。 */
   stateEvent: ChatStateEventData | null;
+  /** fire-and-forget 的事实抽取 promise，route 不 await；仅测试用 */
+  memoryExtraction?: Promise<number>;
 };
 
 /** LLM 结果抽象：真实 streamText 与测试 fake 都满足此形状。 */
@@ -368,8 +376,9 @@ export async function runChatPipeline(
   body: ChatRequestBody,
   now: string,
   llmFactory?: LlmStreamFactory,
-  memory?: MemoryClient | null,
+  extractComplete?: CompleteFn,
   emotionExtractor?: EmotionExtractor,
+  memory?: MemoryClient | null,
 ): Promise<ChatPipelineResult> {
   const persisted = persistUserMessage(handle, body, now);
   const memoryClient = memory === undefined ? createPythonMemoryClient() : memory;
@@ -396,29 +405,99 @@ export async function runChatPipeline(
     }
   }
 
+  // S3b：fire-and-forget 事实抽取（写入层），失败不影响聊天流
+  const memoryExtraction = scheduleFactExtraction(
+    handle,
+    {
+      owner: { userId: LOCAL_USER_ID, agentId: persisted.agentId },
+      sourceMessageId: persisted.messageId,
+      userText: body.message,
+      pad: stateEvent
+        ? {
+            v: stateEvent.after.valence,
+            a: stateEvent.after.arousal,
+            d: stateEvent.after.dominance,
+          }
+        : null,
+      now,
+    },
+    extractComplete,
+  );
+
   // Prompt 注入当前情绪（含本轮抽取后的展示态）
   const agentRow = handle.db.select().from(agents).where(eq(agents.id, persisted.agentId)).get();
   const emotionLine = agentRow
     ? buildEmotionPromptLine(computeDisplayState(agentRow, now), agentRow.currentTag as EmotionTag)
     : null;
+  // S3c：检索 Top-K active 记忆注入 system（语义 + 情感一致性 + 时间），F18 删除即失效
+  const memoryHits = searchMemories(handle, {
+    owner: { userId: LOCAL_USER_ID, agentId: persisted.agentId },
+    queryText: body.message,
+    currentPad: stateEvent
+      ? {
+          v: stateEvent.after.valence,
+          a: stateEvent.after.arousal,
+          d: stateEvent.after.dominance,
+        }
+      : null,
+    nowIso: now,
+  });
+  const memoryLine =
+    memoryHits.length > 0
+      ? '关于用户的长期记忆（自然地运用，不要逐条复述）：\n' +
+        memoryHits.map((m) => '- ' + m.content).join('\n')
+      : null;
+  // 语义检索（bge-base-zh）补充召回历史对话；失败降级不影响对话
   let memoryBlock = '';
   if (memoryClient) {
     try {
       const { topK } = loadMemoryConfig();
       const hits = await memoryClient.search(body.message, topK);
       if (hits.length > 0) {
-        memoryBlock = `[相关记忆]
-${hits.map((h) => `- ${h}`).join('\n')}\n\n(以上为历史对话记忆,仅供参考,不要主动提及本列表)`;
+        memoryBlock = `[相关记忆]\n${hits.map((h) => `- ${h}`).join('\n')}\n\n(以上为历史对话记忆,仅供参考,不要主动提及本列表)`;
       }
     } catch {
       // 降级约定:检索失败不阻断对话
     }
   }
-  const systemBase = emotionLine ? `${PERSONA_CORE_MD}\n\n${emotionLine}` : PERSONA_CORE_MD;
+  const systemParts = [PERSONA_CORE_MD];
+  if (emotionLine) systemParts.push(emotionLine);
+  if (memoryLine) systemParts.push(memoryLine);
+  if (memoryBlock) systemParts.push(memoryBlock);
   const prompt = {
-    system: [systemBase, memoryBlock].filter((part) => part.length > 0).join('\n\n'),
+    system: systemParts.filter((part) => part.length > 0).join('\n\n'),
     messages: recent,
   };
+
+  // 再巩固入口：命中即刷新 last_accessed_at（S4 formalize；随抽取 promise 一起被测试等待）
+  const memoryAccess = Promise.resolve().then(() => {
+    updateLastAccessed(handle, memoryHits.map((m) => m.id), now);
+    reconsolidateHits(handle, memoryHits.map((m) => m.id), now);
+    const summary = maybeTriggerSummary(handle, persisted.conversationId, persisted.agentId, now);
+    if (summary.triggered && extractComplete) {
+      return runSummaryTask(handle, summary.summaryId!, extractComplete, new Date().toISOString());
+    }
+    return undefined;
+  });
+  void memoryExtraction.then(() => memoryAccess).catch(() => undefined);
+
+  // F36 调试模式：仅在 app_settings.debug_mode 开启时写入 Prompt 快照
+  if (isDebugModeEnabled(handle)) {
+    try {
+      handle.db.insert(promptSnapshots).values({
+        id: `snap_${randomUUID()}`,
+        agentId: persisted.agentId,
+        conversationId: persisted.conversationId,
+        userMessageId: persisted.messageId,
+        systemText: prompt.system,
+        memoryIdsJson: JSON.stringify(memoryHits.map((m) => m.id)),
+        recentWindowCount: String(prompt.messages.length),
+        createdAt: now,
+      }).run();
+    } catch (error) {
+      console.warn('[debug] prompt snapshot failed:', error);
+    }
+  }
 
   let llm: LlmStreamHandle;
   try {
@@ -445,6 +524,7 @@ ${hits.map((h) => `- ${h}`).join('\n')}\n\n(以上为历史对话记忆,仅供�
     memory: memoryClient,
     llm,
     stateEvent,
+    memoryExtraction,
   };
 }
 
@@ -547,11 +627,16 @@ export async function handleChatRequest(
   deps: {
     body: ChatRequestBody;
     llmFactory?: LlmStreamFactory;
+    extractComplete?: CompleteFn;
+    emotionExtractor?: EmotionExtractor;
     memoryClient?: MemoryClient | null;
   },
   handle: DbHandle,
   now: string,
 ): Promise<Response> {
-  const pipeline = await runChatPipeline(handle, deps.body, now, deps.llmFactory, deps.memoryClient);
+  const pipeline = await runChatPipeline(
+    handle, deps.body, now, deps.llmFactory, deps.extractComplete, deps.emotionExtractor, deps.memoryClient,
+  );
   return createChatResponse(handle, pipeline, now);
 }
+

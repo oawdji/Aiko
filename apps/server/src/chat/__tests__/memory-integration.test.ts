@@ -115,7 +115,7 @@ describe('chat pipeline memory integration (T7)', () => {
     };
     void capturingLlm;
 
-    const pipeline = await runChatPipeline(handle, baseBody, NOW, factory, client);
+    const pipeline = await runChatPipeline(handle, baseBody, NOW, factory, undefined, undefined, client);
     expect(searchCalls).toEqual(['我家宠物叫什么?']);
     expect(capturedSystem).toContain('[相关记忆]');
     expect(capturedSystem).toContain('咪咪');
@@ -140,6 +140,8 @@ describe('chat pipeline memory integration (T7)', () => {
       { ...baseBody, clientMessageId: 'client_mem_2' },
       NOW,
       () => fakeLlm('没关系'),
+      undefined,
+      undefined,
       failing,
     );
     const sse = await readSse(createChatResponse(handle, pipeline, NOW));
@@ -161,6 +163,8 @@ describe('chat pipeline memory integration (T7)', () => {
       { ...baseBody, clientMessageId: 'client_mem_3' },
       NOW,
       () => fakeLlm('ok'),
+      undefined,
+      undefined,
       null,
     );
     void pipeline;

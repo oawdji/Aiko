@@ -15,10 +15,13 @@ const EXPECTED_TABLES = [
   'messages',
   'persona_versions',
   'state_events',
+  'memories',
+  'conversation_summaries',
+  'prompt_snapshots',
 ];
 
 describe('runMigrations', () => {
-  it('creates all six tables on a fresh database', () => {
+  it('creates all tables on a fresh database', () => {
     const dbPath = path.join(mkdtempSync(path.join(tmpdir(), 'aiko-mig-')), 'agent.sqlite');
     const handle = createDb(dbPath);
 
@@ -44,7 +47,7 @@ describe('runMigrations', () => {
     const applied = handle.sqlite
       .prepare('SELECT COUNT(*) AS count FROM __drizzle_migrations')
       .get() as { count: number };
-    expect(applied.count).toBe(2);
+    expect(applied.count).toBe(4);
 
     handle.sqlite.close();
   });
