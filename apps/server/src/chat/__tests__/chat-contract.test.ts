@@ -45,7 +45,9 @@ const body: ChatRequestBody = {
 function fakeLlm(reply: string): LlmStreamHandle {
   const stream = createUIMessageStream({
     execute: ({ writer }) => {
+      writer.write({ type: 'text-start', id: 'fake' });
       writer.write({ type: 'text-delta', id: 'fake', delta: reply });
+      writer.write({ type: 'text-end', id: 'fake' });
     },
   });
   return { text: Promise.resolve(reply), toUimessageStream: () => stream as never };

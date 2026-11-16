@@ -430,6 +430,9 @@ export function createChatResponse(
       let emittedChars = 0;
       let tail = '';
       let lastTextId = 'aiko-tail';
+      // text-end 必须随尾部扣留一起延后:短回复的全部 delta 都在缓冲里,
+      // 若 end 先透传,补发的 delta 会落在已关闭的文本部分上(前端报 missing text part)。
+      const pendingTextEnds: UIMessageChunk[] = [];
       try {
         for await (const chunk of iterateLlmChunks(pipeline.llm.toUimessageStream())) {
           if (chunk.type === 'text-delta') {
@@ -442,6 +445,8 @@ export function createChatResponse(
               emittedChars += safe.length;
               tail = tail.slice(-EMOTION_MARKER_MAX_CHARS);
             }
+          } else if (chunk.type === 'text-end') {
+            pendingTextEnds.push(chunk);
           } else {
             writer.write(chunk);
           }
@@ -453,6 +458,9 @@ export function createChatResponse(
         const rest = content.slice(emittedChars);
         if (rest) {
           writer.write({ type: 'text-delta', id: lastTextId, delta: rest });
+        }
+        for (const end of pendingTextEnds) {
+          writer.write(end);
         }
 
         writeAssistantMessage(handle, {

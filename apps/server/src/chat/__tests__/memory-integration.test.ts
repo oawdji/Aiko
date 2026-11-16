@@ -37,7 +37,9 @@ beforeAll(() => {
 function fakeLlm(reply: string, captured?: { system?: string }): LlmStreamHandle {
   const stream = createUIMessageStream({
     execute: ({ writer }) => {
+      writer.write({ type: 'text-start', id: 'fake' });
       writer.write({ type: 'text-delta', id: 'fake', delta: reply });
+      writer.write({ type: 'text-end', id: 'fake' });
     },
   });
   return {
@@ -52,7 +54,7 @@ function capturingLlm(captured: { system: string }): LlmStreamHandle {
   return {
     text: Promise.resolve('好的'),
     toUimessageStream: () =>
-      createUIMessageStream({ execute: ({ writer: w }) => w.write({ type: 'text-delta', id: 'f', delta: '好的' }) }) as never,
+      createUIMessageStream({ execute: ({ writer: w }) => { w.write({ type: 'text-start', id: 'f' }); w.write({ type: 'text-delta', id: 'f', delta: '好的' }); w.write({ type: 'text-end', id: 'f' }); } }) as never,
   };
 }
 

@@ -65,7 +65,9 @@ function zeroAgentState(nowIso = NOW): void {
 function fakeLlm(reply: string): LlmStreamHandle {
   const stream = createUIMessageStream({
     execute: ({ writer }) => {
+      writer.write({ type: 'text-start', id: 'fake' });
       writer.write({ type: 'text-delta', id: 'fake', delta: reply });
+      writer.write({ type: 'text-end', id: 'fake' });
     },
   });
   return { text: Promise.resolve(reply), toUimessageStream: () => stream as never };
@@ -246,5 +248,19 @@ describe('chat pipeline (A 方案:LLM 情绪自评)', () => {
     };
     expect(frame.data.event.before.valence).toBeCloseTo(0.2, 5);
     expect(frame.data.event.after.valence).toBeCloseTo(0.45, 5);
+  });
+
+  it('short reply (< marker buffer): deltas still arrive before text-end on the wire', async () => {
+    zeroAgentState();
+    const body = { ...baseBody, clientMessageId: 'client_pipe_short' };
+    const pipeline = await runChatPipeline(handle, body, NOW, () => fakeLlm('是呀'));
+    const sse = await readSse(createChatResponse(handle, pipeline, NOW));
+    const types = sse.split('\n')
+      .filter((l) => l.startsWith('data: ') && !l.includes('[DONE]'))
+      .map((l) => (JSON.parse(l.slice('data: '.length)) as { type: string }).type);
+    const lastDelta = types.lastIndexOf('text-delta');
+    const firstEnd = types.indexOf('text-end');
+    expect(lastDelta).toBeGreaterThan(-1);
+    expect(firstEnd).toBeGreaterThan(lastDelta);
   });
 });
