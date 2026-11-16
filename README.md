@@ -133,14 +133,20 @@ pnpm gen:persona   # 从 docs/persona-core-v1.md 重新生成锚点模块
 **开发机首次运行**(本模块需要 Python 3.10+):
 
 ```bash
-pip install -r services/embedding/requirements.txt
-# 国内网络建议先设置 HF 镜像(模型约 400MB,首次运行自动下载)
+python -m venv .venv
+.venv\Scripts\pip install -r services/embedding/requirements.txt
+
+# TS 侧对接:PYTHON_EXECUTABLE 指向 venv 解释器
+# PowerShell: $env:PYTHON_EXECUTABLE = "D:\code\ai\.venv\Scripts\python.exe"
+# 或直接使用已下载的本地模型:EMBEDDING_MODEL_NAME 指向模型目录(如 data/models/bge-base-zh-v1.5),无需联网
+# 在线下载则建议先设置 HF 镜像(模型约 400MB)
 $env:HF_ENDPOINT = "https://hf-mirror.com"   # PowerShell
-python services/embedding/embedder.py        # 冒烟:期望 shape (2, 768)
-python services/retrieval/local_retriever.py # 冒烟:期望 smoke OK(无需模型)
+.venv\Scripts\python services/embedding/embedder.py        # 冒烟:期望 shape (2, 768)
+.venv\Scripts\python services/retrieval/local_retriever.py # 冒烟:期望 smoke OK(无需模型)
+.venv\Scripts\python services/retrieval/semantic_check.py  # 真语义召回验证(需先设 EMBEDDING_MODEL_NAME)
 ```
 
-未安装 Python/模型时聊天完全不受影响(自动降级)。配置项(`EMBEDDING_MODEL_NAME` / `EMBEDDING_DEVICE` / `MEMORY_DB_PATH` / `MEMORY_TOP_K` 等)见 `apps/server/.env.example`。
+未安装 Python/模型时聊天完全不受影响(自动降级)。venv 目录与 data/ 一样不入库,开发机需按上述步骤重建。配置项(`EMBEDDING_MODEL_NAME` / `EMBEDDING_DEVICE` / `MEMORY_DB_PATH` / `MEMORY_TOP_K` 等)见 `apps/server/.env.example`。
 
 已知限制:全量余弦检索约 10 万条内毫秒级,超过需把 `store.py` 换成 FAISS(只换一个文件);每轮入库为同步子进程调用,若成瓶颈可将 CLI 升级为常驻 HTTP 服务(只改 `memory-client.ts`)。
 ## 安全与隐私
