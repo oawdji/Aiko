@@ -1,92 +1,98 @@
-import { z } from 'zod';
-import type { CompleteFn } from '../extraction/types';
-import { EMOTION_DELTA_LIMIT, extractEmotion, type EmotionExtraction } from './emotion-rules';
-
-/** 引擎标识：emotion-llm-v1（LLM 结构化抽取，失败回退词典规则）。 */
-export const EMOTION_LLM_VERSION = 'emotion-llm-v1';
-
-const EmotionLlmOutputSchema = z.object({
-  emotion: z.union([
-    z.null(),
-    z.object({
-      delta: z.object({
-        valence: z.number(),
-        arousal: z.number(),
-        dominance: z.number(),
-      }),
-      confidence: z.number().min(0).max(1),
-      evidenceText: z.string().min(1),
-      reason: z.string().min(1),
-    }),
-  ]),
-});
-
-const EMOTION_LLM_SYSTEM_PROMPT = [
-  '你是情绪分析模块。分析「用户消息」中用户的情绪，输出 PAD 三维（愉悦度 valence / 唤醒度 arousal / 支配度 dominance，取值范围 -1 到 1）的该条消息情绪变化（delta）。',
-  '规则：',
-  '- 消息没有明显情绪（日常陈述、事实问答、纯指令等）时，输出 {"emotion":null}；',
-  '- 有明显情绪时，输出 {"emotion":{"delta":{"valence":number,"arousal":number,"dominance":number},"confidence":number,"evidenceText":"触发情绪的关键词或短语","reason":"一句话中文说明"}}；',
-  '- delta 是这条消息带来的情绪变化量，通常在 -0.3 到 0.3 之间，不要夸大；',
-  '- 注意语境、反讽与否定（例如「呵呵」「算了」「随便你」往往是负面情绪）；',
-  '- confidence 取 0 到 1；',
-  '- 只输出一个 JSON 对象，不要输出任何其他文字或代码块标记。',
-].join('\n');
-
-/** 从 LLM 回复中提取 JSON（容忍代码块围栏与前后杂文本）。 */
-export function extractJsonObject(raw: string): unknown {
-  const start = raw.indexOf('{');
-  const end = raw.lastIndexOf('}');
-  if (start === -1 || end <= start) {
-    throw new Error('no JSON object found in LLM output');
-  }
-  return JSON.parse(raw.slice(start, end + 1));
-}
-
-function clampDelta(value: number): number {
-  return Math.min(EMOTION_DELTA_LIMIT, Math.max(-EMOTION_DELTA_LIMIT, value));
-}
+import type { AgentEmotionState, EmotionTag } from '@aiko/shared';
 
 /**
- * LLM 结构化情绪抽取引擎（主路径 LLM，失败回退词典）：
- * - complete 未注入（测试/降级）时直接退化为词典规则；
- * - LLM 调用失败或输出不合法 → 回退 extractEmotion，不影响聊天主链路；
- * - LLM 明确判定无明显情绪（emotion: null）→ 返回 null（不产生状态事件）；
- * - delta 超出单条上限时截断（§10.5，与词典引擎一致）。
+ * PAD 情绪状态数学模块：
+ * applyEmotion（增量截断 + 状态更新）/ computeTag（离散标签分区）/ clampState。
+ * 情绪抽取已改为聊天前独立 LLM 小调用（emotion-extract.ts），
+ * 不再依赖回复内嵌标记协议。
+ * EMOTION_ENGINE=off 时关闭：不调用抽取、不产生事件。
  */
-export function createLlmEmotionEngine(complete?: CompleteFn) {
-  if (!complete) {
-    return (text: string): EmotionExtraction | null => extractEmotion(text);
-  }
-  return async (text: string): Promise<EmotionExtraction | null> => {
-    try {
-      const raw = await complete({
-        system: EMOTION_LLM_SYSTEM_PROMPT,
-        prompt: `用户消息：\n${text}`,
-      });
-      const parsed = EmotionLlmOutputSchema.safeParse(extractJsonObject(raw));
-      if (!parsed.success) {
-        return extractEmotion(text);
-      }
-      if (parsed.data.emotion === null) {
-        return null;
-      }
-      const { delta, confidence, evidenceText, reason } = parsed.data.emotion;
-      return {
-        delta: {
-          valence: Number(clampDelta(delta.valence).toFixed(4)),
-          arousal: Number(clampDelta(delta.arousal).toFixed(4)),
-          dominance: Number(clampDelta(delta.dominance).toFixed(4)),
-        },
-        confidence: Number(confidence.toFixed(2)),
-        evidenceText,
-        reason,
-      };
-    } catch (error) {
-      console.warn(
-        `[emotion] ${EMOTION_LLM_VERSION} failed, fallback to rules:`,
-        error instanceof Error ? error.message : error,
-      );
-      return extractEmotion(text);
-    }
+
+/** 抽取方式变更时递增(state_events.rule_version)。 */
+export const EMOTION_EXTRACTION_VERSION = 'emotion-llm-v2';
+
+/** 单次事件 delta 上限(沿用原 §10.5 语义)。 */
+export const EMOTION_DELTA_LIMIT = 0.3;
+
+/** 离散标签分区阈值(沿用原 §10.7 语义)。 */
+const TAG_THRESHOLD = 0.05;
+
+export type EmotionExtraction = {
+  delta: AgentEmotionState;
+  confidence: number;
+  evidenceText: string;
+  reason: string;
+};
+
+/** 各标签在强度 5/5 时的基础 PAD 增量;实际按强度线性缩放。 */
+const TAG_DELTA: Record<EmotionTag, AgentEmotionState> = {
+  happy: { valence: 0.25, arousal: 0.2, dominance: 0.1 },
+  calm: { valence: 0.1, arousal: -0.1, dominance: 0.05 },
+  curious: { valence: 0.1, arousal: 0.15, dominance: 0.05 },
+  neutral: { valence: 0, arousal: 0, dominance: 0 },
+  low: { valence: -0.3, arousal: -0.15, dominance: -0.1 },
+  tense: { valence: -0.2, arousal: 0.25, dominance: -0.1 },
+};
+
+export function isEmotionEngineEnabled(): boolean {
+  return process.env.EMOTION_ENGINE !== 'off';
+}
+
+/** 将抽取结果（标签+强度）换算为 PAD 增量 EmotionExtraction。 */
+export function buildExtraction(
+  tag: EmotionTag,
+  intensity: number,
+  reason: string,
+): EmotionExtraction {
+  const scale = intensity / 5;
+  const base = TAG_DELTA[tag];
+  return {
+    delta: {
+      valence: Number((base.valence * scale).toFixed(4)),
+      arousal: Number((base.arousal * scale).toFixed(4)),
+      dominance: Number((base.dominance * scale).toFixed(4)),
+    },
+    confidence: Number((0.4 + intensity * 0.12).toFixed(2)),
+    evidenceText: `模型自评: ${tag}(${intensity}/5)`,
+    reason,
   };
+}
+
+export function clampState(value: number): number {
+  return Math.min(1, Math.max(-1, value));
+}
+
+/** 单条事件 delta 截断 + 状态更新;返回 after 与实际生效 delta。 */
+export function applyEmotion(
+  current: AgentEmotionState,
+  extraction: EmotionExtraction,
+): { after: AgentEmotionState; delta: AgentEmotionState } {
+  const clampDelta = (v: number) =>
+    Math.min(EMOTION_DELTA_LIMIT, Math.max(-EMOTION_DELTA_LIMIT, v));
+  const after: AgentEmotionState = {
+    valence: clampState(current.valence + clampDelta(extraction.delta.valence)),
+    arousal: clampState(current.arousal + clampDelta(extraction.delta.arousal)),
+    dominance: clampState(current.dominance + clampDelta(extraction.delta.dominance)),
+  };
+  return {
+    after,
+    delta: {
+      valence: Number((after.valence - current.valence).toFixed(4)),
+      arousal: Number((after.arousal - current.arousal).toFixed(4)),
+      dominance: Number((after.dominance - current.dominance).toFixed(4)),
+    },
+  };
+}
+
+/** 离散标签分区:valence/arousal 按固定阈值 0.05 分区,结果确定。 */
+export function computeTag(state: AgentEmotionState): EmotionTag {
+  const valence = clampState(state.valence);
+  const arousal = clampState(state.arousal);
+  if (valence <= -TAG_THRESHOLD) {
+    return arousal > TAG_THRESHOLD ? 'tense' : 'low';
+  }
+  if (valence >= TAG_THRESHOLD) {
+    return arousal > TAG_THRESHOLD ? 'happy' : 'calm';
+  }
+  return arousal > TAG_THRESHOLD ? 'curious' : 'neutral';
 }

@@ -1,72 +1,62 @@
-import { describe, expect, it, vi } from 'vitest';
-import { createLlmEmotionEngine, extractJsonObject } from '../emotion-llm';
-import type { CompleteFn } from '../../extraction/types';
+import { describe, expect, it, afterEach, vi } from 'vitest';
+import {
+  EMOTION_DELTA_LIMIT,
+  applyEmotion,
+  buildExtraction,
+  clampState,
+  computeTag,
+  isEmotionEngineEnabled,
+} from '../emotion-llm';
 
-function completeReturning(text: string): CompleteFn {
-  return vi.fn().mockResolvedValue(text);
-}
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
-describe('extractJsonObject', () => {
-  it('parses plain JSON', () => {
-    expect(extractJsonObject('{"emotion":null}')).toEqual({ emotion: null });
-  });
-
-  it('parses JSON inside code fences and surrounding text', () => {
-    expect(extractJsonObject('好的：\n```json\n{"emotion":null}\n```')).toEqual({
-      emotion: null,
-    });
-  });
-
-  it('throws when no object present', () => {
-    expect(() => extractJsonObject('抱歉我无法回答')).toThrow();
+describe('isEmotionEngineEnabled', () => {
+  it('is on by default and off with EMOTION_ENGINE=off', () => {
+    delete process.env.EMOTION_ENGINE;
+    expect(isEmotionEngineEnabled()).toBe(true);
+    vi.stubEnv('EMOTION_ENGINE', 'off');
+    expect(isEmotionEngineEnabled()).toBe(false);
   });
 });
 
-describe('createLlmEmotionEngine', () => {
-  it('returns LLM extraction when output is valid', async () => {
-    const engine = createLlmEmotionEngine(
-      completeReturning(
-        JSON.stringify({
-          emotion: {
-            delta: { valence: -0.5, arousal: 0.2, dominance: -0.1 },
-            confidence: 0.9,
-            evidenceText: '随便你',
-            reason: '敷衍语气带有负面情绪。',
-          },
-        }),
-      ),
+describe('buildExtraction', () => {
+  it('scales TAG_DELTA by intensity/5', () => {
+    const e = buildExtraction('happy', 4, '聊到喜欢的事');
+    expect(e.delta.valence).toBeCloseTo(0.2, 5);
+    expect(e.delta.arousal).toBeCloseTo(0.16, 5);
+    expect(e.delta.dominance).toBeCloseTo(0.08, 5);
+    expect(e.reason).toBe('聊到喜欢的事');
+    expect(e.evidenceText).toContain('happy(4/5)');
+  });
+  it('produces zero delta for neutral', () => {
+    const e = buildExtraction('neutral', 3, '普通对话');
+    expect(e.delta.valence).toBe(0);
+    expect(e.delta.arousal).toBe(0);
+    expect(e.delta.dominance).toBe(0);
+  });
+});
+
+describe('emotion state math', () => {
+  it('clamps deltas to the per-event limit', () => {
+    expect(clampState(2)).toBe(1);
+    expect(clampState(-2)).toBe(-1);
+    const { after, delta } = applyEmotion(
+      { valence: 0, arousal: 0, dominance: 0 },
+      { delta: { valence: 1, arousal: -1, dominance: 0 }, confidence: 1, evidenceText: '', reason: '' },
     );
-    const result = await engine('随便你吧');
-    expect(result).not.toBeNull();
-    // delta 超出单条上限 0.3 时截断
-    expect(result!.delta.valence).toBe(-0.3);
-    expect(result!.delta.arousal).toBe(0.2);
-    expect(result!.evidenceText).toBe('随便你');
+    expect(after.valence).toBe(EMOTION_DELTA_LIMIT);
+    expect(after.arousal).toBe(-EMOTION_DELTA_LIMIT);
+    expect(delta.valence).toBe(EMOTION_DELTA_LIMIT);
   });
 
-  it('returns null when LLM judges no clear emotion', async () => {
-    const engine = createLlmEmotionEngine(completeReturning('{"emotion":null}'));
-    expect(await engine('今天周二')).toBeNull();
-  });
-
-  it('falls back to lexicon when LLM output is invalid', async () => {
-    const engine = createLlmEmotionEngine(completeReturning('抱歉我无法回答'));
-    const result = await engine('今天好累');
-    expect(result).not.toBeNull();
-    expect(result!.evidenceText).toBe('累');
-  });
-
-  it('falls back to lexicon when LLM call rejects', async () => {
-    const complete: CompleteFn = vi.fn().mockRejectedValue(new Error('network down'));
-    const engine = createLlmEmotionEngine(complete);
-    const result = await engine('好开心');
-    expect(result).not.toBeNull();
-    expect(result!.evidenceText).toBe('开心');
-  });
-
-  it('degrades to lexicon-only when complete is not provided', async () => {
-    const engine = createLlmEmotionEngine();
-    expect((await engine('今天好累'))?.evidenceText).toBe('累');
-    expect(await engine('今天天气不错')).toBeNull();
+  it('maps state partitions to discrete tags', () => {
+    expect(computeTag({ valence: -0.2, arousal: 0.2, dominance: 0 })).toBe('tense');
+    expect(computeTag({ valence: -0.2, arousal: -0.2, dominance: 0 })).toBe('low');
+    expect(computeTag({ valence: 0.2, arousal: 0.2, dominance: 0 })).toBe('happy');
+    expect(computeTag({ valence: 0.2, arousal: -0.2, dominance: 0 })).toBe('calm');
+    expect(computeTag({ valence: 0, arousal: 0.2, dominance: 0 })).toBe('curious');
+    expect(computeTag({ valence: 0, arousal: 0, dominance: 0 })).toBe('neutral');
   });
 });

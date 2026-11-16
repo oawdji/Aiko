@@ -189,7 +189,6 @@ describe('chat pipeline wiring (S3b)', () => {
       body,
       NOW,
       () => fakeLlm('做饭很有趣呢！'),
-      undefined,
       async () => FACT_JSON,
     );
     expect(pipeline.memoryExtraction).toBeDefined();
@@ -216,7 +215,6 @@ describe('chat pipeline wiring (S3b)', () => {
       body,
       NOW,
       () => fakeLlm('今天很适合出门散步。'),
-      undefined,
       async () => {
         throw new Error('extraction llm down');
       },
