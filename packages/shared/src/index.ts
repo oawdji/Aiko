@@ -6,3 +6,5 @@ export type { AgentEmotionState } from './types/emotion';
 export * from './types/decay';
 export type { AgentStateEventData } from './types/state';
 export type { ZodType } from 'zod';
+export type { MemoryHit, MemoryMetadata, MemoryRetriever } from './types/retrieval';
+export * from './schemas/memory';

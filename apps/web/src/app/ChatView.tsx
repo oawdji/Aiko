@@ -15,6 +15,8 @@ import { DevChecklist } from './DevChecklist';
 import { SettingsDialog } from '../settings/components/SettingsDialog';
 import { fetchConversation, fetchConversationList } from '../shared/api/chat-recovery';
 import { fetchSettings } from '../shared/api/settings-api';
+import { MemoryViewer } from '../memories/components/MemoryViewer';
+import { StatusTimeline } from '../status/components/StatusTimeline';
 import { StatusPanel } from '../status/components/StatusPanel';
 import { ErrorNotice } from '../shared/components/ErrorNotice';
 import { useServerHealth } from '../shared/hooks/useServerHealth';
@@ -190,6 +192,7 @@ export function ChatView({ bootstrap }: { bootstrap: BootstrapResponse }) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [panelOpen, historyOpen, settingsOpen]);
+  const [memoriesOpen, setMemoriesOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -274,6 +277,14 @@ export function ChatView({ bootstrap }: { bootstrap: BootstrapResponse }) {
           </button>
           <button
             type="button"
+            aria-label="打开记忆查看器"
+            onClick={() => setMemoriesOpen(true)}
+            className="shrink-0 rounded-lg border border-neutral-700 px-3 py-2 text-xs text-neutral-300 hover:bg-neutral-800"
+          >
+            🧠 记忆
+          </button>
+          <button
+            type="button"
             aria-label="打开设置"
             onClick={() => setSettingsOpen(true)}
             className="shrink-0 rounded-lg border border-neutral-700 px-3 py-2 text-xs text-neutral-300 hover:bg-neutral-800"
@@ -345,6 +356,7 @@ export function ChatView({ bootstrap }: { bootstrap: BootstrapResponse }) {
           </button>
         </div>
         <StatusPanel />
+        <StatusTimeline agentId={bootstrap.agent.id} />
         <DevChecklist />
       </aside>
 
@@ -354,6 +366,8 @@ export function ChatView({ bootstrap }: { bootstrap: BootstrapResponse }) {
         onSaved={(data) => setLlmSettings(data)}
         onClose={() => setSettingsOpen(false)}
       />
+
+      <MemoryViewer open={memoriesOpen} onClose={() => setMemoriesOpen(false)} />
     </main>
   );
 }

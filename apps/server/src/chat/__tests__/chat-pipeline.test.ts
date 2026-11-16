@@ -1,7 +1,7 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createUIMessageStream } from 'ai';
 import type { ChatRequestBody } from '@aiko/shared';
 import { DEFAULT_AGENT_ID, LOCAL_USER_ID } from '@aiko/shared';
@@ -14,6 +14,7 @@ import {
   LlmRequestFailedError,
   createChatResponse,
   runChatPipeline,
+  type EmotionExtractor,
   type LlmStreamHandle,
 } from '../service';
 
@@ -39,6 +40,10 @@ beforeAll(() => {
   }).run();
 });
 
+afterAll(() => {
+  vi.unstubAllEnvs();
+});
+
 const baseBody: ChatRequestBody = {
   agentId: DEFAULT_AGENT_ID,
   conversationId: 'conv_pipe',
@@ -46,10 +51,29 @@ const baseBody: ChatRequestBody = {
   clientMessageId: 'client_pipe_1',
 };
 
+/** 抽取器 fake:始终返回 low|5(方案 1 独立抽取,不依赖回复标记)。 */
+const extractLow5: EmotionExtractor = async () => ({ tag: 'low', intensity: 5, reason: '用户很疲惫' });
+
+/** 抽取器 fake:始终返回 null(抽取失败降级)。 */
+const extractNull: EmotionExtractor = async () => null;
+
+function zeroAgentState(nowIso = NOW): void {
+  handle.db.update(agents).set({
+    currentValence: 0,
+    currentArousal: 0,
+    currentDominance: 0,
+    currentTag: 'neutral',
+    stateUpdatedAt: nowIso,
+    updatedAt: nowIso,
+  }).where(eq(agents.id, DEFAULT_AGENT_ID)).run();
+}
+
 function fakeLlm(reply: string): LlmStreamHandle {
   const stream = createUIMessageStream({
     execute: ({ writer }) => {
+      writer.write({ type: 'text-start', id: 'fake' });
       writer.write({ type: 'text-delta', id: 'fake', delta: reply });
+      writer.write({ type: 'text-end', id: 'fake' });
     },
   });
   return { text: Promise.resolve(reply), toUimessageStream: () => stream as never };
@@ -67,60 +91,76 @@ async function readSse(response: Response): Promise<string> {
   return text;
 }
 
-describe('chat pipeline (M3.4)', () => {
-  it('persists user + assistant messages, emits state event before text, updates agent snapshot', async () => {
-    const pipeline = await runChatPipeline(handle, baseBody, NOW, () => fakeLlm('辛苦啦，早点休息。'));
-    expect(pipeline.stateEvent).not.toBeNull();
-    expect(pipeline.stateEvent?.discreteTag).toBe('low');
+describe('chat pipeline (方案 1:聊天前独立情绪抽取)', () => {
+  it('extraction before reply: state event emitted before text, reply passes through clean', async () => {
+    zeroAgentState();
+    const pipeline = await runChatPipeline(
+      handle, baseBody, NOW,
+      () => fakeLlm('辛苦啦,早点休息。'),
+      undefined,
+      extractLow5,
+    );
 
     const response = createChatResponse(handle, pipeline, NOW);
     const sse = await readSse(response);
+    expect(sse).toContain('辛苦啦,早点休息。');
+    // 事件先于文本(方案 1:情绪在聊天前独立抽取)
+    const eventIdx = sse.indexOf('data-agent-state-event');
+    const textIdx = sse.indexOf('text-delta');
+    expect(eventIdx).toBeGreaterThan(-1);
+    expect(eventIdx).toBeLessThan(textIdx);
 
-    const eventIndex = sse.indexOf('data-agent-state-event');
-    const textIndex = sse.indexOf('text-delta');
-    expect(eventIndex).toBeGreaterThan(-1);
-    expect(textIndex).toBeGreaterThan(eventIndex);
-    expect(sse).toContain('辛苦啦');
-
-    const stored = handle.sqlite
-      .prepare("SELECT role, status, content, error_code FROM messages WHERE conversation_id = ? ORDER BY created_at, CASE role WHEN 'user' THEN 0 ELSE 1 END")
-      .all('conv_pipe') as Array<{ role: string; status: string; content: string; error_code: string | null }>;
-    expect(stored.map((m) => m.role)).toEqual(['user', 'assistant']);
-    expect(stored[1]!.status).toBe('complete');
-    expect(stored[1]!.content).toBe('辛苦啦，早点休息。');
-    expect(stored[1]!.error_code).toBeNull();
+    const lastAssistant = handle.sqlite
+      .prepare("SELECT content, status, error_code FROM messages WHERE conversation_id = 'conv_pipe' AND role = 'assistant' ORDER BY created_at DESC, id DESC LIMIT 1")
+      .get() as { content: string; status: string; error_code: string | null };
+    expect(lastAssistant.content).toBe('辛苦啦,早点休息。');
 
     const event = handle.sqlite
       .prepare('SELECT * FROM state_events WHERE trigger_message_id = ?')
       .get(pipeline.userMessageId) as Record<string, unknown>;
-    expect(event.rule_version).toBe('emotion-rules-v2');
+    expect(event.rule_version).toBe('emotion-llm-v2');
     expect(event.discrete_tag).toBe('low');
     expect(event.source).toBe('user_message');
 
     const agent = handle.db.select().from(agents).where(eq(agents.id, DEFAULT_AGENT_ID)).get()!;
+    // low | 5 → valence -0.3, arousal -0.15, dominance -0.1
     expect(agent.currentTag).toBe('low');
-    expect(agent.currentValence).toBeCloseTo(-0.1);
-    expect(agent.currentArousal).toBeCloseTo(-0.04);
+    expect(agent.currentValence).toBeCloseTo(-0.3, 5);
+    expect(agent.currentArousal).toBeCloseTo(-0.15, 5);
+    expect(agent.currentDominance).toBeCloseTo(-0.1, 5);
     expect(agent.stateUpdatedAt).toBe(NOW);
   });
 
-  it('skips state event when message has no emotion clue', async () => {
+  it('emits no state event when extraction returns null', async () => {
+    zeroAgentState();
     const body = { ...baseBody, message: '今天天气不错', clientMessageId: 'client_pipe_2' };
-    const pipeline = await runChatPipeline(handle, body, NOW, () => fakeLlm('是呀'));
-    expect(pipeline.stateEvent).toBeNull();
+    const pipeline = await runChatPipeline(
+      handle, body, NOW,
+      () => fakeLlm('是呀'),
+      undefined,
+      extractNull,
+    );
 
     const response = createChatResponse(handle, pipeline, NOW);
     const sse = await readSse(response);
     expect(sse).not.toContain('data-agent-state-event');
     expect(sse).toContain('是呀');
+
+    const eventCount = handle.sqlite
+      .prepare('SELECT COUNT(*) AS n FROM state_events')
+      .get() as { n: number };
+    const before = handle.sqlite
+      .prepare("SELECT COUNT(*) AS n FROM state_events WHERE trigger_message_id != ?")
+      .get(pipeline.userMessageId) as { n: number };
+    expect(eventCount.n).toBe(before.n);
   });
 
-  it('writes failed assistant placeholder and throws LLM_REQUEST_FAILED when factory fails', async () => {
+  it('throws LLM_REQUEST_FAILED when factory fails', async () => {
     const body = { ...baseBody, clientMessageId: 'client_pipe_3' };
     await expect(
       runChatPipeline(handle, body, NOW, () => {
         throw new LlmRequestFailedError('no key');
-      }),
+      }, undefined, extractNull),
     ).rejects.toBeInstanceOf(LlmRequestFailedError);
 
     const failedCount = handle.sqlite
@@ -129,23 +169,30 @@ describe('chat pipeline (M3.4)', () => {
     expect(failedCount.n).toBeGreaterThanOrEqual(1);
   });
 
-  it('emotion engine off: no state event and agent snapshot unchanged', async () => {
+  it('emotion engine off: no extraction, no state event', async () => {
+    vi.stubEnv('EMOTION_ENGINE', 'off');
+    zeroAgentState();
     const before = handle.db.select().from(agents).where(eq(agents.id, DEFAULT_AGENT_ID)).get()!;
     const body = { ...baseBody, message: '今天好累', clientMessageId: 'client_pipe_off' };
-    const pipeline = await runChatPipeline(handle, body, NOW, () => fakeLlm('好的'), () => null);
-    expect(pipeline.stateEvent).toBeNull();
+    const pipeline = await runChatPipeline(
+      handle, body, NOW,
+      () => fakeLlm('好的。'),
+      undefined,
+      extractLow5, // 引擎关时不应该被调用
+    );
 
     const response = createChatResponse(handle, pipeline, NOW);
     const sse = await readSse(response);
     expect(sse).not.toContain('data-agent-state-event');
-    expect(sse).toContain('好的');
+    expect(sse).toContain('好的。');
 
     const after = handle.db.select().from(agents).where(eq(agents.id, DEFAULT_AGENT_ID)).get()!;
     expect(after.currentValence).toBe(before.currentValence);
-    expect(after.currentArousal).toBe(before.currentArousal);
     expect(after.currentTag).toBe(before.currentTag);
   });
+
   it('marks assistant failed when stream text rejects', async () => {
+    vi.unstubAllEnvs();
     const body = { ...baseBody, message: '平静', clientMessageId: 'client_pipe_4' };
     const stream = createUIMessageStream({
       execute: ({ writer }) => {
@@ -155,7 +202,7 @@ describe('chat pipeline (M3.4)', () => {
     const pipeline = await runChatPipeline(handle, body, NOW, () => ({
       text: Promise.reject(new Error('midstream failure')),
       toUimessageStream: () => stream as never,
-    }));
+    }), undefined, extractNull);
 
     const response = createChatResponse(handle, pipeline, NOW);
     await readSse(response);
@@ -166,8 +213,10 @@ describe('chat pipeline (M3.4)', () => {
     expect(failedCount.n).toBeGreaterThanOrEqual(1);
   });
 
-  it('applies baseline regression before the new delta and injects the emotion line into the prompt (T6)', async () => {
-    // 快照 valence 0.4，6 小时前更新（= 一个半程）→ 回归到 0.2，再叠加「累」-0.1 → 0.1
+  it('applies baseline regression before the new delta and injects the emotion line into the prompt', async () => {
+    vi.unstubAllEnvs();
+    // 快照 valence 0.4,6 小时前更新(= 一个半程)→ 展示态回归到 0.2;
+    // 抽取 low|5 → delta -0.3 → after -0.1
     handle.db.update(agents).set({
       currentValence: 0.4,
       currentArousal: 0,
@@ -186,11 +235,34 @@ describe('chat pipeline (M3.4)', () => {
         capturedSystem = prompt.system;
         return fakeLlm('好的。');
       },
+      undefined,
+      extractLow5,
     );
 
-    expect(pipeline.stateEvent?.before.valence).toBeCloseTo(0.2, 5);
-    expect(pipeline.stateEvent?.after.valence).toBeCloseTo(0.1, 5);
     expect(capturedSystem).toContain('【当前情绪状态】');
-    expect(capturedSystem).toContain('calm');
+    // 抽取 low|5 已生效:after valence -0.1, arousal -0.15 → tag low
+    expect(capturedSystem).toContain('low');
+
+    const sse = await readSse(createChatResponse(handle, pipeline, NOW));
+    const eventLine = sse.split('\n').find((l) => l.includes('data-agent-state-event'))!;
+    const frame = JSON.parse(eventLine.replace(/^data:\s*/, '')) as {
+      data: { event: { before: { valence: number }; after: { valence: number } } };
+    };
+    expect(frame.data.event.before.valence).toBeCloseTo(0.2, 5);
+    expect(frame.data.event.after.valence).toBeCloseTo(-0.1, 5);
+  });
+
+  it('deltas arrive before text-end on the wire', async () => {
+    zeroAgentState();
+    const body = { ...baseBody, clientMessageId: 'client_pipe_short' };
+    const pipeline = await runChatPipeline(handle, body, NOW, () => fakeLlm('是呀'), undefined, extractNull);
+    const sse = await readSse(createChatResponse(handle, pipeline, NOW));
+    const types = sse.split('\n')
+      .filter((l) => l.startsWith('data: ') && !l.includes('[DONE]'))
+      .map((l) => (JSON.parse(l.slice('data: '.length)) as { type: string }).type);
+    const lastDelta = types.lastIndexOf('text-delta');
+    const firstEnd = types.indexOf('text-end');
+    expect(lastDelta).toBeGreaterThan(-1);
+    expect(firstEnd).toBeGreaterThan(lastDelta);
   });
 });

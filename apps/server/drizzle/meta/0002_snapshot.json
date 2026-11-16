@@ -1,0 +1,1317 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "5b07ccea-36c7-41c7-baf9-c42d69d69200",
+  "prevId": "5763c750-b1b5-42cc-8647-8bab9c556ef5",
+  "tables": {
+    "agents": {
+      "name": "agents",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "slug": {
+          "name": "slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "display_name": {
+          "name": "display_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "current_valence": {
+          "name": "current_valence",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "current_arousal": {
+          "name": "current_arousal",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "current_dominance": {
+          "name": "current_dominance",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "baseline_valence": {
+          "name": "baseline_valence",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "baseline_arousal": {
+          "name": "baseline_arousal",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "baseline_dominance": {
+          "name": "baseline_dominance",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "decay_half_life_hours": {
+          "name": "decay_half_life_hours",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "current_tag": {
+          "name": "current_tag",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "state_updated_at": {
+          "name": "state_updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "active_persona_version": {
+          "name": "active_persona_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "agents_slug_unique": {
+          "name": "agents_slug_unique",
+          "columns": [
+            "slug"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "agents_current_valence_range": {
+          "name": "agents_current_valence_range",
+          "value": "\"agents\".\"current_valence\" >= -1 AND \"agents\".\"current_valence\" <= 1"
+        },
+        "agents_current_arousal_range": {
+          "name": "agents_current_arousal_range",
+          "value": "\"agents\".\"current_arousal\" >= -1 AND \"agents\".\"current_arousal\" <= 1"
+        },
+        "agents_current_dominance_range": {
+          "name": "agents_current_dominance_range",
+          "value": "\"agents\".\"current_dominance\" >= -1 AND \"agents\".\"current_dominance\" <= 1"
+        },
+        "agents_baseline_valence_range": {
+          "name": "agents_baseline_valence_range",
+          "value": "\"agents\".\"baseline_valence\" >= -1 AND \"agents\".\"baseline_valence\" <= 1"
+        },
+        "agents_baseline_arousal_range": {
+          "name": "agents_baseline_arousal_range",
+          "value": "\"agents\".\"baseline_arousal\" >= -1 AND \"agents\".\"baseline_arousal\" <= 1"
+        },
+        "agents_baseline_dominance_range": {
+          "name": "agents_baseline_dominance_range",
+          "value": "\"agents\".\"baseline_dominance\" >= -1 AND \"agents\".\"baseline_dominance\" <= 1"
+        },
+        "agents_decay_half_life_hours_positive": {
+          "name": "agents_decay_half_life_hours_positive",
+          "value": "(\"agents\".\"decay_half_life_hours\" IS NULL OR \"agents\".\"decay_half_life_hours\" > 0)"
+        },
+        "agents_current_tag_enum": {
+          "name": "agents_current_tag_enum",
+          "value": "\"agents\".\"current_tag\" IN ('calm', 'curious', 'happy', 'low', 'tense', 'neutral')"
+        },
+        "agents_active_persona_version_min": {
+          "name": "agents_active_persona_version_min",
+          "value": "\"agents\".\"active_persona_version\" >= 1"
+        }
+      }
+    },
+    "app_settings": {
+      "name": "app_settings",
+      "columns": {
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "value_json": {
+          "name": "value_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "app_settings_value_json_valid": {
+          "name": "app_settings_value_json_valid",
+          "value": "json_valid(\"app_settings\".\"value_json\")"
+        }
+      }
+    },
+    "conversation_summaries": {
+      "name": "conversation_summaries",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "conversation_id": {
+          "name": "conversation_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "agent_id": {
+          "name": "agent_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "start_message_id": {
+          "name": "start_message_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "end_message_id": {
+          "name": "end_message_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "content": {
+          "name": "content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'pending'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "conversation_summaries_conversation_idx": {
+          "name": "conversation_summaries_conversation_idx",
+          "columns": [
+            "conversation_id"
+          ],
+          "isUnique": false
+        },
+        "conversation_summaries_agent_idx": {
+          "name": "conversation_summaries_agent_idx",
+          "columns": [
+            "agent_id",
+            "status"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "conversation_summaries_conversation_id_conversations_id_fk": {
+          "name": "conversation_summaries_conversation_id_conversations_id_fk",
+          "tableFrom": "conversation_summaries",
+          "tableTo": "conversations",
+          "columnsFrom": [
+            "conversation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "conversation_summaries_agent_id_agents_id_fk": {
+          "name": "conversation_summaries_agent_id_agents_id_fk",
+          "tableFrom": "conversation_summaries",
+          "tableTo": "agents",
+          "columnsFrom": [
+            "agent_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "conversation_summaries_start_message_id_messages_id_fk": {
+          "name": "conversation_summaries_start_message_id_messages_id_fk",
+          "tableFrom": "conversation_summaries",
+          "tableTo": "messages",
+          "columnsFrom": [
+            "start_message_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "conversation_summaries_end_message_id_messages_id_fk": {
+          "name": "conversation_summaries_end_message_id_messages_id_fk",
+          "tableFrom": "conversation_summaries",
+          "tableTo": "messages",
+          "columnsFrom": [
+            "end_message_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "conversation_summaries_status_enum": {
+          "name": "conversation_summaries_status_enum",
+          "value": "\"conversation_summaries\".\"status\" IN ('pending', 'ready', 'failed', 'deleted')"
+        }
+      }
+    },
+    "conversations": {
+      "name": "conversations",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "agent_id": {
+          "name": "agent_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "last_message_at": {
+          "name": "last_message_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "is_archived": {
+          "name": "is_archived",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "conversations_agent_last_message_idx": {
+          "name": "conversations_agent_last_message_idx",
+          "columns": [
+            "agent_id",
+            "\"last_message_at\" desc"
+          ],
+          "isUnique": false
+        },
+        "conversations_user_agent_idx": {
+          "name": "conversations_user_agent_idx",
+          "columns": [
+            "user_id",
+            "agent_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "conversations_agent_id_agents_id_fk": {
+          "name": "conversations_agent_id_agents_id_fk",
+          "tableFrom": "conversations",
+          "tableTo": "agents",
+          "columnsFrom": [
+            "agent_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "conversations_is_archived_flag": {
+          "name": "conversations_is_archived_flag",
+          "value": "\"conversations\".\"is_archived\" IN (0, 1)"
+        }
+      }
+    },
+    "messages": {
+      "name": "messages",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "conversation_id": {
+          "name": "conversation_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "agent_id": {
+          "name": "agent_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "content": {
+          "name": "content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "client_message_id": {
+          "name": "client_message_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "error_code": {
+          "name": "error_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "metadata_json": {
+          "name": "metadata_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "messages_conversation_created_idx": {
+          "name": "messages_conversation_created_idx",
+          "columns": [
+            "conversation_id",
+            "\"created_at\" desc"
+          ],
+          "isUnique": false
+        },
+        "messages_agent_created_idx": {
+          "name": "messages_agent_created_idx",
+          "columns": [
+            "agent_id",
+            "\"created_at\" desc"
+          ],
+          "isUnique": false
+        },
+        "messages_status_idx": {
+          "name": "messages_status_idx",
+          "columns": [
+            "status"
+          ],
+          "isUnique": false
+        },
+        "messages_conversation_client_message_unique": {
+          "name": "messages_conversation_client_message_unique",
+          "columns": [
+            "conversation_id",
+            "client_message_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "messages_conversation_id_conversations_id_fk": {
+          "name": "messages_conversation_id_conversations_id_fk",
+          "tableFrom": "messages",
+          "tableTo": "conversations",
+          "columnsFrom": [
+            "conversation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "messages_agent_id_agents_id_fk": {
+          "name": "messages_agent_id_agents_id_fk",
+          "tableFrom": "messages",
+          "tableTo": "agents",
+          "columnsFrom": [
+            "agent_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "messages_role_enum": {
+          "name": "messages_role_enum",
+          "value": "\"messages\".\"role\" IN ('user', 'assistant', 'system')"
+        },
+        "messages_status_enum": {
+          "name": "messages_status_enum",
+          "value": "\"messages\".\"status\" IN ('streaming', 'complete', 'failed')"
+        },
+        "messages_user_requires_client_message_id": {
+          "name": "messages_user_requires_client_message_id",
+          "value": "\"messages\".\"role\" <> 'user' OR \"messages\".\"client_message_id\" IS NOT NULL"
+        },
+        "messages_failed_requires_error_code": {
+          "name": "messages_failed_requires_error_code",
+          "value": "\"messages\".\"status\" <> 'failed' OR \"messages\".\"error_code\" IS NOT NULL"
+        },
+        "messages_metadata_json_valid": {
+          "name": "messages_metadata_json_valid",
+          "value": "\"messages\".\"metadata_json\" IS NULL OR json_valid(\"messages\".\"metadata_json\")"
+        }
+      }
+    },
+    "state_events": {
+      "name": "state_events",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "agent_id": {
+          "name": "agent_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "conversation_id": {
+          "name": "conversation_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "trigger_message_id": {
+          "name": "trigger_message_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "rule_version": {
+          "name": "rule_version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "before_valence": {
+          "name": "before_valence",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "before_arousal": {
+          "name": "before_arousal",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "before_dominance": {
+          "name": "before_dominance",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "delta_valence": {
+          "name": "delta_valence",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "delta_arousal": {
+          "name": "delta_arousal",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "delta_dominance": {
+          "name": "delta_dominance",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "after_valence": {
+          "name": "after_valence",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "after_arousal": {
+          "name": "after_arousal",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "after_dominance": {
+          "name": "after_dominance",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "discrete_tag": {
+          "name": "discrete_tag",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "evidence_text": {
+          "name": "evidence_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "confidence": {
+          "name": "confidence",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "state_events_agent_created_idx": {
+          "name": "state_events_agent_created_idx",
+          "columns": [
+            "agent_id",
+            "\"created_at\" desc"
+          ],
+          "isUnique": false
+        },
+        "state_events_conversation_created_idx": {
+          "name": "state_events_conversation_created_idx",
+          "columns": [
+            "conversation_id",
+            "\"created_at\" desc"
+          ],
+          "isUnique": false
+        },
+        "state_events_trigger_idx": {
+          "name": "state_events_trigger_idx",
+          "columns": [
+            "trigger_message_id"
+          ],
+          "isUnique": false
+        },
+        "state_events_trigger_source_rule_unique": {
+          "name": "state_events_trigger_source_rule_unique",
+          "columns": [
+            "trigger_message_id",
+            "source",
+            "rule_version"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "state_events_agent_id_agents_id_fk": {
+          "name": "state_events_agent_id_agents_id_fk",
+          "tableFrom": "state_events",
+          "tableTo": "agents",
+          "columnsFrom": [
+            "agent_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "state_events_conversation_id_conversations_id_fk": {
+          "name": "state_events_conversation_id_conversations_id_fk",
+          "tableFrom": "state_events",
+          "tableTo": "conversations",
+          "columnsFrom": [
+            "conversation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "state_events_trigger_message_id_messages_id_fk": {
+          "name": "state_events_trigger_message_id_messages_id_fk",
+          "tableFrom": "state_events",
+          "tableTo": "messages",
+          "columnsFrom": [
+            "trigger_message_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "state_events_source_enum": {
+          "name": "state_events_source_enum",
+          "value": "\"state_events\".\"source\" IN ('user_message', 'assistant_message', 'time_decay', 'manual')"
+        },
+        "state_events_before_valence_range": {
+          "name": "state_events_before_valence_range",
+          "value": "\"state_events\".\"before_valence\" >= -1 AND \"state_events\".\"before_valence\" <= 1"
+        },
+        "state_events_before_arousal_range": {
+          "name": "state_events_before_arousal_range",
+          "value": "\"state_events\".\"before_arousal\" >= -1 AND \"state_events\".\"before_arousal\" <= 1"
+        },
+        "state_events_before_dominance_range": {
+          "name": "state_events_before_dominance_range",
+          "value": "\"state_events\".\"before_dominance\" >= -1 AND \"state_events\".\"before_dominance\" <= 1"
+        },
+        "state_events_delta_valence_range": {
+          "name": "state_events_delta_valence_range",
+          "value": "\"state_events\".\"delta_valence\" >= -1 AND \"state_events\".\"delta_valence\" <= 1"
+        },
+        "state_events_delta_arousal_range": {
+          "name": "state_events_delta_arousal_range",
+          "value": "\"state_events\".\"delta_arousal\" >= -1 AND \"state_events\".\"delta_arousal\" <= 1"
+        },
+        "state_events_delta_dominance_range": {
+          "name": "state_events_delta_dominance_range",
+          "value": "\"state_events\".\"delta_dominance\" >= -1 AND \"state_events\".\"delta_dominance\" <= 1"
+        },
+        "state_events_after_valence_range": {
+          "name": "state_events_after_valence_range",
+          "value": "\"state_events\".\"after_valence\" >= -1 AND \"state_events\".\"after_valence\" <= 1"
+        },
+        "state_events_after_arousal_range": {
+          "name": "state_events_after_arousal_range",
+          "value": "\"state_events\".\"after_arousal\" >= -1 AND \"state_events\".\"after_arousal\" <= 1"
+        },
+        "state_events_after_dominance_range": {
+          "name": "state_events_after_dominance_range",
+          "value": "\"state_events\".\"after_dominance\" >= -1 AND \"state_events\".\"after_dominance\" <= 1"
+        },
+        "state_events_confidence_range": {
+          "name": "state_events_confidence_range",
+          "value": "\"state_events\".\"confidence\" >= 0 AND \"state_events\".\"confidence\" <= 1"
+        },
+        "state_events_discrete_tag_enum": {
+          "name": "state_events_discrete_tag_enum",
+          "value": "\"state_events\".\"discrete_tag\" IN ('calm', 'curious', 'happy', 'low', 'tense', 'neutral')"
+        },
+        "state_events_message_trigger_required": {
+          "name": "state_events_message_trigger_required",
+          "value": "\"state_events\".\"source\" NOT IN ('user_message', 'assistant_message') OR \"state_events\".\"trigger_message_id\" IS NOT NULL"
+        }
+      }
+    },
+    "persona_versions": {
+      "name": "persona_versions",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "agent_id": {
+          "name": "agent_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "persona_core_md": {
+          "name": "persona_core_md",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "persona_core_hash": {
+          "name": "persona_core_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "evolvable_json": {
+          "name": "evolvable_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "is_active": {
+          "name": "is_active",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "activated_at": {
+          "name": "activated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "persona_versions_one_active_idx": {
+          "name": "persona_versions_one_active_idx",
+          "columns": [
+            "agent_id"
+          ],
+          "isUnique": true,
+          "where": "\"persona_versions\".\"is_active\" = 1"
+        },
+        "persona_versions_agent_version_idx": {
+          "name": "persona_versions_agent_version_idx",
+          "columns": [
+            "agent_id",
+            "\"version\" desc"
+          ],
+          "isUnique": false
+        },
+        "persona_versions_agent_version_unique": {
+          "name": "persona_versions_agent_version_unique",
+          "columns": [
+            "agent_id",
+            "version"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "persona_versions_agent_id_agents_id_fk": {
+          "name": "persona_versions_agent_id_agents_id_fk",
+          "tableFrom": "persona_versions",
+          "tableTo": "agents",
+          "columnsFrom": [
+            "agent_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "persona_versions_version_min": {
+          "name": "persona_versions_version_min",
+          "value": "\"persona_versions\".\"version\" >= 1"
+        },
+        "persona_versions_is_active_flag": {
+          "name": "persona_versions_is_active_flag",
+          "value": "\"persona_versions\".\"is_active\" IN (0, 1)"
+        },
+        "persona_versions_evolvable_json_valid": {
+          "name": "persona_versions_evolvable_json_valid",
+          "value": "json_valid(\"persona_versions\".\"evolvable_json\")"
+        }
+      }
+    },
+    "memories": {
+      "name": "memories",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "agent_id": {
+          "name": "agent_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "content": {
+          "name": "content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source_message_id": {
+          "name": "source_message_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "confidence": {
+          "name": "confidence",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'candidate'"
+        },
+        "memory_pad": {
+          "name": "memory_pad",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "arousal": {
+          "name": "arousal",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "half_life_hours": {
+          "name": "half_life_hours",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "strength": {
+          "name": "strength",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        },
+        "is_core": {
+          "name": "is_core",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "last_accessed_at": {
+          "name": "last_accessed_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "memories_source_content_unique": {
+          "name": "memories_source_content_unique",
+          "columns": [
+            "source_message_id",
+            "lower(\"content\")"
+          ],
+          "isUnique": true
+        },
+        "memories_owner_status_idx": {
+          "name": "memories_owner_status_idx",
+          "columns": [
+            "user_id",
+            "agent_id",
+            "status"
+          ],
+          "isUnique": false
+        },
+        "memories_owner_type_idx": {
+          "name": "memories_owner_type_idx",
+          "columns": [
+            "user_id",
+            "agent_id",
+            "type"
+          ],
+          "isUnique": false
+        },
+        "memories_source_message_idx": {
+          "name": "memories_source_message_idx",
+          "columns": [
+            "source_message_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "memories_agent_id_agents_id_fk": {
+          "name": "memories_agent_id_agents_id_fk",
+          "tableFrom": "memories",
+          "tableTo": "agents",
+          "columnsFrom": [
+            "agent_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "memories_source_message_id_messages_id_fk": {
+          "name": "memories_source_message_id_messages_id_fk",
+          "tableFrom": "memories",
+          "tableTo": "messages",
+          "columnsFrom": [
+            "source_message_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "memories_type_enum": {
+          "name": "memories_type_enum",
+          "value": "\"memories\".\"type\" IN ('fact', 'preference', 'goal', 'episode', 'relationship')"
+        },
+        "memories_status_enum": {
+          "name": "memories_status_enum",
+          "value": "\"memories\".\"status\" IN ('candidate', 'active', 'outdated', 'rejected', 'deleted')"
+        },
+        "memories_confidence_range": {
+          "name": "memories_confidence_range",
+          "value": "\"memories\".\"confidence\" >= 0 AND \"memories\".\"confidence\" <= 1"
+        },
+        "memories_arousal_range": {
+          "name": "memories_arousal_range",
+          "value": "\"memories\".\"arousal\" >= 0 AND \"memories\".\"arousal\" <= 1"
+        },
+        "memories_strength_range": {
+          "name": "memories_strength_range",
+          "value": "\"memories\".\"strength\" >= 0 AND \"memories\".\"strength\" <= 1"
+        },
+        "memories_half_life_positive": {
+          "name": "memories_half_life_positive",
+          "value": "\"memories\".\"half_life_hours\" > 0"
+        }
+      }
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {
+      "conversations_agent_last_message_idx": {
+        "columns": {
+          "\"last_message_at\" desc": {
+            "isExpression": true
+          }
+        }
+      },
+      "messages_conversation_created_idx": {
+        "columns": {
+          "\"created_at\" desc": {
+            "isExpression": true
+          }
+        }
+      },
+      "messages_agent_created_idx": {
+        "columns": {
+          "\"created_at\" desc": {
+            "isExpression": true
+          }
+        }
+      },
+      "state_events_agent_created_idx": {
+        "columns": {
+          "\"created_at\" desc": {
+            "isExpression": true
+          }
+        }
+      },
+      "state_events_conversation_created_idx": {
+        "columns": {
+          "\"created_at\" desc": {
+            "isExpression": true
+          }
+        }
+      },
+      "persona_versions_agent_version_idx": {
+        "columns": {
+          "\"version\" desc": {
+            "isExpression": true
+          }
+        }
+      },
+      "memories_source_content_unique": {
+        "columns": {
+          "lower(\"content\")": {
+            "isExpression": true
+          }
+        }
+      }
+    }
+  }
+}

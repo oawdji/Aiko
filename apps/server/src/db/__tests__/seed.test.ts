@@ -74,7 +74,7 @@ describe('seedDefaultData', () => {
     handle.sqlite.close();
   });
 
-  it('seeds the four default settings with correct JSON values', () => {
+  it('seeds the five default settings with correct JSON values', () => {
     const handle = makeFreshHandle();
     seedDefaultData(handle, '2026-11-12T00:00:00.000Z');
 
@@ -87,7 +87,7 @@ describe('seedDefaultData', () => {
     expect(byKey['recent_window_rounds']).toBe('15');
     expect(byKey['max_context_messages']).toBe('30');
     expect(byKey['theme']).toBe('"system"');
-    expect(rows).toHaveLength(4);
+    expect(rows).toHaveLength(5);
     handle.sqlite.close();
   });
 
@@ -106,7 +106,7 @@ describe('seedDefaultData', () => {
 
     expect(count('agents')).toBe(1);
     expect(count('persona_versions')).toBe(1);
-    expect(count('app_settings')).toBe(4);
+    expect(count('app_settings')).toBe(5);
     handle.sqlite.close();
   });
 

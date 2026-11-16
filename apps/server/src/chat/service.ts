@@ -18,10 +18,27 @@ import type { DbHandle } from '../db/client';
 import { PERSONA_CORE_MD } from '../db/generated/persona-core';
 import { agents, conversations, messages, stateEvents } from '../db/schema';
 import { type PromptMessage } from './recent-window';
-import { EMOTION_RULES_VERSION, applyEmotion, computeTag, type EmotionExtraction } from './emotion-rules';
-import { defaultEmotionEngine, type EmotionEngine } from './emotion-engine';
+import {
+  EMOTION_EXTRACTION_VERSION,
+  applyEmotion,
+  buildExtraction,
+  computeTag,
+  isEmotionEngineEnabled,
+  type EmotionExtraction,
+} from './emotion-llm';
+import { extractEmotionViaLlm } from './emotion-extract';
 import { computeDisplayState, resolveDecayConfig, revertToBaseline } from './emotion-decay';
 import { buildEmotionPromptLine } from './emotion-prompt';
+import { loadMemoryConfig } from '../config/memory';
+import { createPythonMemoryClient, type MemoryClient } from './memory-client';
+import { createDefaultExtractComplete, scheduleFactExtraction } from '../extraction/pipeline';
+import { searchMemories, updateLastAccessed } from '../memories/retrieval';
+import { maybeTriggerSummary, reconsolidateHits, runSummaryTask } from '../memories/lifecycle';
+import { isDebugModeEnabled } from '../settings/service';
+import { promptSnapshots } from '../db/schema';
+import type { CompleteFn } from '../extraction/types';
+
+export type { MemoryClient };
 
 export class ChatAgentNotFoundError extends Error {
   constructor(agentRef: string) {
@@ -77,8 +94,13 @@ export type ChatPipelineResult = {
   agentId: string;
   conversationId: string;
   userMessageId: string;
-  stateEvent: ChatStateEventData | null;
+  userMessage: string;
+  memory: MemoryClient | null;
   llm: LlmStreamHandle;
+  /** 聊天前独立抽取已落库的状态事件（可能为 null = 引擎关/抽取失败降级）。 */
+  stateEvent: ChatStateEventData | null;
+  /** fire-and-forget 的事实抽取 promise，route 不 await；仅测试用 */
+  memoryExtraction?: Promise<number>;
 };
 
 /** LLM 结果抽象：真实 streamText 与测试 fake 都满足此形状。 */
@@ -86,6 +108,11 @@ export type LlmStreamHandle = {
   text: PromiseLike<string>;
   toUimessageStream: () => ReadableStream<UIMessageChunk> | AsyncIterable<UIMessageChunk>;
 };
+
+export type EmotionExtractor = (
+  userMessage: string,
+  recent: PromptMessage[],
+) => Promise<{ tag: string; intensity: number; reason: string } | null>;
 
 export type LlmStreamFactory = (prompt: {
   system: string;
@@ -114,7 +141,7 @@ function isUniqueViolation(error: unknown): boolean {
     typeof error === 'object' &&
     error !== null &&
     'code' in error &&
-    (error as { code?: string }).code === 'SQLITE_CONSTRAINT_UNIQUE'
+    (error as { code?: unknown }).code === 'SQLITE_CONSTRAINT_UNIQUE'
   );
 }
 
@@ -183,7 +210,7 @@ export function persistUserMessage(
   return { messageId, conversationId: conversation.id, agentId: agent.id };
 }
 
-/** M3.3 接线：无线索返回 null（§10.6 不生成事件）；有线索落 state_event 并更新 agent 快照。 */
+/** 状态事件落库并更新 agent 快照（含读时回归 → delta → 三维快照写入）。 */
 export function applyStateEvent(
   handle: DbHandle,
   params: {
@@ -201,7 +228,6 @@ export function applyStateEvent(
     throw new ChatAgentNotFoundError(params.agentId);
   }
 
-  // 先基线回归（OU，§10.11），再叠加 delta；回归折叠进本事件 before，不落 time_decay 事件
   const before = revertToBaseline(
     { valence: agent.currentValence, arousal: agent.currentArousal, dominance: agent.currentDominance },
     { valence: agent.baselineValence, arousal: agent.baselineArousal, dominance: agent.baselineDominance },
@@ -222,13 +248,16 @@ export function applyStateEvent(
         conversationId: params.conversationId,
         triggerMessageId: params.triggerMessageId,
         source: 'user_message',
-        ruleVersion: EMOTION_RULES_VERSION,
+        ruleVersion: EMOTION_EXTRACTION_VERSION,
         beforeValence: before.valence,
         beforeArousal: before.arousal,
+        beforeDominance: before.dominance,
         deltaValence: delta.valence,
         deltaArousal: delta.arousal,
+        deltaDominance: delta.dominance,
         afterValence: after.valence,
         afterArousal: after.arousal,
+        afterDominance: after.dominance,
         discreteTag,
         reason: params.extraction.reason,
         evidenceText: params.extraction.evidenceText,
@@ -241,6 +270,7 @@ export function applyStateEvent(
       .set({
         currentValence: after.valence,
         currentArousal: after.arousal,
+        currentDominance: after.dominance,
         currentTag: discreteTag,
         stateUpdatedAt: params.now,
         updatedAt: params.now,
@@ -262,7 +292,7 @@ export function applyStateEvent(
   };
 }
 
-/** 数据库近期窗口（替代 Phase 0 的前端携带历史，见 recent-window.ts 注释）。 */
+/** 数据库近期窗口。 */
 export function loadRecentWindow(handle: DbHandle, conversationId: string, limit: number): PromptMessage[] {
   return handle.db
     .select()
@@ -305,8 +335,7 @@ function writeAssistantMessage(
 }
 
 /**
- * 默认 LLM 工厂：每次调用时解析生效配置（app_settings 覆盖 > 环境变量 > 默认值），
- * 失败（含未配置 Key）映射为契约错误。设置修改后热生效、无需重启。
+ * 默认 LLM 工厂：每次调用时解析生效配置，失败归一为 LLM_REQUEST_FAILED。
  */
 export function createDefaultLlmStreamFactory(handle: DbHandle): LlmStreamFactory {
   return ({ system, messages: prompt }) => {
@@ -332,46 +361,143 @@ export function createDefaultLlmStreamFactory(handle: DbHandle): LlmStreamFactor
       if (error instanceof LlmRequestFailedError) {
         throw error;
       }
-      // 配置缺失等同步失败也归一为 LLM_REQUEST_FAILED
       throw new LlmRequestFailedError(error instanceof Error ? error.message : undefined);
     }
   };
 }
 
 /**
- * M3.4 编排（api-contract.md §13.5 流程 5–11）：
- * 用户消息 → 情绪抽取/事件 → Prompt 组装（PERSONA_CORE + 数据库近期窗口）→ LLM 流式。
- * assistant 落库发生在 UI stream 消费完成之后（createChatResponse 内）。
+ * 聊天编排：
+ * 用户消息 → 独立情绪抽取（方案 1）→ 状态事件落库 → Prompt 组装（含更新后情绪）→ LLM 流式。
+ * 情绪事件先于回复产生，createChatResponse 在流开头补发。
  */
 export async function runChatPipeline(
   handle: DbHandle,
   body: ChatRequestBody,
   now: string,
   llmFactory?: LlmStreamFactory,
-  emotionEngine: EmotionEngine = defaultEmotionEngine,
+  extractComplete?: CompleteFn,
+  emotionExtractor?: EmotionExtractor,
+  memory?: MemoryClient | null,
 ): Promise<ChatPipelineResult> {
   const persisted = persistUserMessage(handle, body, now);
+  const memoryClient = memory === undefined ? createPythonMemoryClient() : memory;
+  const recent = loadRecentWindow(handle, persisted.conversationId, 30);
 
-  const extraction = emotionEngine(body.message);
-  const stateEvent = extraction
-    ? applyStateEvent(handle, {
-        agentId: persisted.agentId,
-        conversationId: persisted.conversationId,
-        triggerMessageId: persisted.messageId,
-        extraction,
-        now,
-      })
-    : null;
+  // 方案 1：聊天前独立抽取情绪 → 落库状态事件（失败降级不产生事件）
+  let stateEvent: ChatStateEventData | null = null;
+  if (isEmotionEngineEnabled()) {
+    try {
+      const extractor = emotionExtractor ?? ((msg, ctx) => extractEmotionViaLlm(handle, msg, ctx));
+      const raw = await extractor(body.message, recent);
+      if (raw) {
+        const extraction = buildExtraction(raw.tag as EmotionTag, raw.intensity, raw.reason);
+        stateEvent = applyStateEvent(handle, {
+          agentId: persisted.agentId,
+          conversationId: persisted.conversationId,
+          triggerMessageId: persisted.messageId,
+          extraction,
+          now,
+        });
+      }
+    } catch {
+      // 抽取失败降级：不阻断聊天
+    }
+  }
 
-  // Prompt 注入当前情绪（读时回归后的展示态，§10.11）
+  // S3b：fire-and-forget 事实抽取（写入层），失败不影响聊天流
+  const memoryExtraction = scheduleFactExtraction(
+    handle,
+    {
+      owner: { userId: LOCAL_USER_ID, agentId: persisted.agentId },
+      sourceMessageId: persisted.messageId,
+      userText: body.message,
+      pad: stateEvent
+        ? {
+            v: stateEvent.after.valence,
+            a: stateEvent.after.arousal,
+            d: stateEvent.after.dominance,
+          }
+        : null,
+      now,
+    },
+    extractComplete,
+  );
+
+  // Prompt 注入当前情绪（含本轮抽取后的展示态）
   const agentRow = handle.db.select().from(agents).where(eq(agents.id, persisted.agentId)).get();
   const emotionLine = agentRow
     ? buildEmotionPromptLine(computeDisplayState(agentRow, now), agentRow.currentTag as EmotionTag)
     : null;
+  // S3c：检索 Top-K active 记忆注入 system（语义 + 情感一致性 + 时间），F18 删除即失效
+  const memoryHits = searchMemories(handle, {
+    owner: { userId: LOCAL_USER_ID, agentId: persisted.agentId },
+    queryText: body.message,
+    currentPad: stateEvent
+      ? {
+          v: stateEvent.after.valence,
+          a: stateEvent.after.arousal,
+          d: stateEvent.after.dominance,
+        }
+      : null,
+    nowIso: now,
+  });
+  const memoryLine =
+    memoryHits.length > 0
+      ? '关于用户的长期记忆（自然地运用，不要逐条复述）：\n' +
+        memoryHits.map((m) => '- ' + m.content).join('\n')
+      : null;
+  // 语义检索（bge-base-zh）补充召回历史对话；失败降级不影响对话
+  let memoryBlock = '';
+  if (memoryClient) {
+    try {
+      const { topK } = loadMemoryConfig();
+      const hits = await memoryClient.search(body.message, topK);
+      if (hits.length > 0) {
+        memoryBlock = `[相关记忆]\n${hits.map((h) => `- ${h}`).join('\n')}\n\n(以上为历史对话记忆,仅供参考,不要主动提及本列表)`;
+      }
+    } catch {
+      // 降级约定:检索失败不阻断对话
+    }
+  }
+  const systemParts = [PERSONA_CORE_MD];
+  if (emotionLine) systemParts.push(emotionLine);
+  if (memoryLine) systemParts.push(memoryLine);
+  if (memoryBlock) systemParts.push(memoryBlock);
   const prompt = {
-    system: emotionLine ? `${PERSONA_CORE_MD}\n\n${emotionLine}` : PERSONA_CORE_MD,
-    messages: loadRecentWindow(handle, persisted.conversationId, 30),
+    system: systemParts.filter((part) => part.length > 0).join('\n\n'),
+    messages: recent,
   };
+
+  // 再巩固入口：命中即刷新 last_accessed_at（S4 formalize；随抽取 promise 一起被测试等待）
+  const memoryAccess = Promise.resolve().then(() => {
+    updateLastAccessed(handle, memoryHits.map((m) => m.id), now);
+    reconsolidateHits(handle, memoryHits.map((m) => m.id), now);
+    const summary = maybeTriggerSummary(handle, persisted.conversationId, persisted.agentId, now);
+    if (summary.triggered && extractComplete) {
+      return runSummaryTask(handle, summary.summaryId!, extractComplete, new Date().toISOString());
+    }
+    return undefined;
+  });
+  void memoryExtraction.then(() => memoryAccess).catch(() => undefined);
+
+  // F36 调试模式：仅在 app_settings.debug_mode 开启时写入 Prompt 快照
+  if (isDebugModeEnabled(handle)) {
+    try {
+      handle.db.insert(promptSnapshots).values({
+        id: `snap_${randomUUID()}`,
+        agentId: persisted.agentId,
+        conversationId: persisted.conversationId,
+        userMessageId: persisted.messageId,
+        systemText: prompt.system,
+        memoryIdsJson: JSON.stringify(memoryHits.map((m) => m.id)),
+        recentWindowCount: String(prompt.messages.length),
+        createdAt: now,
+      }).run();
+    } catch (error) {
+      console.warn('[debug] prompt snapshot failed:', error);
+    }
+  }
 
   let llm: LlmStreamHandle;
   try {
@@ -394,11 +520,15 @@ export async function runChatPipeline(
     agentId: persisted.agentId,
     conversationId: persisted.conversationId,
     userMessageId: persisted.messageId,
-    stateEvent,
+    userMessage: body.message,
+    memory: memoryClient,
     llm,
+    stateEvent,
+    memoryExtraction,
   };
 }
-/** UI 流组装：状态事件 data part 先于文本增量（Phase 0 锁定顺序），结束后 assistant 落库。 */
+
+/** UI 流组装：文本增量直通转发，流开头补发状态事件（已落库）。 */
 export function createChatResponse(
   handle: DbHandle,
   pipeline: ChatPipelineResult,
@@ -406,33 +536,43 @@ export function createChatResponse(
 ): Response {
   const stream = createUIMessageStream({
     execute: async ({ writer }) => {
+      // 流开头补发状态事件（事件已在 runChatPipeline 落库）
       if (pipeline.stateEvent) {
+        const e = pipeline.stateEvent;
         writer.write({
           type: 'data-agent-state-event',
           data: { event: {
-            id: pipeline.stateEvent.id,
+            id: e.id,
             agentId: pipeline.agentId,
             conversationId: pipeline.conversationId,
-            triggerMessageId: pipeline.stateEvent.triggerMessageId,
+            triggerMessageId: e.triggerMessageId,
             source: 'user_message',
-            ruleVersion: EMOTION_RULES_VERSION,
-            before: pipeline.stateEvent.before,
-            delta: pipeline.stateEvent.delta,
-            after: pipeline.stateEvent.after,
-            discreteTag: pipeline.stateEvent.discreteTag,
-            reason: pipeline.stateEvent.reason,
-            evidenceText: pipeline.stateEvent.evidenceText,
-            confidence: pipeline.stateEvent.confidence,
+            ruleVersion: EMOTION_EXTRACTION_VERSION,
+            before: e.before,
+            delta: e.delta,
+            after: e.after,
+            discreteTag: e.discreteTag,
+            reason: e.reason,
+            evidenceText: e.evidenceText,
+            confidence: e.confidence,
             createdAt: now,
           } },
-          id: pipeline.stateEvent.id,
+          id: e.id,
         });
       }
 
-      writer.merge(pipeline.llm.toUimessageStream() as Parameters<typeof writer.merge>[0]);
-
       try {
+        let streamed = '';
+        for await (const chunk of iterateLlmChunks(pipeline.llm.toUimessageStream())) {
+          if (chunk.type === 'text-delta') {
+            streamed += chunk.delta;
+          }
+          writer.write(chunk);
+        }
+
+        // text 承诺是权威全文;中途失败(拒绝)时走 failed 分支
         const content = await pipeline.llm.text;
+
         writeAssistantMessage(handle, {
           conversationId: pipeline.conversationId,
           agentId: pipeline.agentId,
@@ -440,6 +580,18 @@ export function createChatResponse(
           content,
           errorCode: null,
         });
+
+        // T7:本轮对话(用户+助手)写入长期记忆;失败不影响响应流。
+        if (pipeline.memory) {
+          try {
+            await pipeline.memory.indexDialogue([
+              { role: 'user', content: pipeline.userMessage },
+              { role: 'assistant', content },
+            ]);
+          } catch (error) {
+            console.warn('[memory] index failed (degraded):', error instanceof Error ? error.message : error);
+          }
+        }
       } catch {
         writeAssistantMessage(handle, {
           conversationId: pipeline.conversationId,
@@ -455,16 +607,36 @@ export function createChatResponse(
   return createUIMessageStreamResponse({ stream });
 }
 
+async function* iterateLlmChunks(
+  stream: ReadableStream<UIMessageChunk> | AsyncIterable<UIMessageChunk>,
+): AsyncGenerator<UIMessageChunk> {
+  if (Symbol.asyncIterator in stream) {
+    yield* stream as AsyncIterable<UIMessageChunk>;
+    return;
+  }
+  const reader = (stream as ReadableStream<UIMessageChunk>).getReader();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    yield value;
+  }
+}
+
 /** 聊天编排入口：route 只负责校验与错误映射。 */
 export async function handleChatRequest(
   deps: {
     body: ChatRequestBody;
     llmFactory?: LlmStreamFactory;
-    emotionEngine?: EmotionEngine;
+    extractComplete?: CompleteFn;
+    emotionExtractor?: EmotionExtractor;
+    memoryClient?: MemoryClient | null;
   },
   handle: DbHandle,
   now: string,
 ): Promise<Response> {
-  const pipeline = await runChatPipeline(handle, deps.body, now, deps.llmFactory, deps.emotionEngine);
+  const pipeline = await runChatPipeline(
+    handle, deps.body, now, deps.llmFactory, deps.extractComplete, deps.emotionExtractor, deps.memoryClient,
+  );
   return createChatResponse(handle, pipeline, now);
 }
+
