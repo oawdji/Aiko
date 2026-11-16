@@ -3,7 +3,9 @@ import {
   MESSAGE_PAGE_LIMIT_DEFAULT,
   MESSAGE_PAGE_LIMIT_MAX,
   ConversationDetailResponseSchema,
+  ConversationListResponseSchema,
   type ConversationDetailResponse,
+  type ConversationListResponse,
 } from '@aiko/shared';
 import type { DbHandle } from '../db/client';
 import {
@@ -26,6 +28,51 @@ export class ConversationNotFoundError extends Error {
     super(`Conversation not found: ${conversationId}`);
     this.name = 'ConversationNotFoundError';
   }
+}
+
+const PREVIEW_MAX = 80;
+
+function toPreview(content: string | null | undefined): string | null {
+  if (!content) return null;
+  const flat = content.replace(/\s+/g, ' ').trim();
+  if (!flat) return null;
+  return flat.length > PREVIEW_MAX ? `${flat.slice(0, PREVIEW_MAX)}…` : flat;
+}
+
+/**
+ * 历史记录列表：未归档会话按最近活动倒序。
+ * preview 取该会话第一条用户消息，用作侧栏标题。
+ */
+export function listConversations(handle: DbHandle, agentId?: string): ConversationListResponse {
+  const { db } = handle;
+  const filter = agentId
+    ? and(eq(conversations.agentId, agentId), eq(conversations.isArchived, 0))
+    : eq(conversations.isArchived, 0);
+
+  const rows = db
+    .select()
+    .from(conversations)
+    .where(filter)
+    .orderBy(
+      sql`COALESCE(${conversations.lastMessageAt}, ${conversations.updatedAt}) DESC`,
+      desc(conversations.id),
+    )
+    .all();
+
+  const items = rows.map((row) => {
+    const firstUser = db
+      .select({ content: messages.content })
+      .from(messages)
+      .where(and(eq(messages.conversationId, row.id), eq(messages.role, 'user')))
+      .orderBy(messages.createdAt, sql`rowid ASC`)
+      .get();
+    return {
+      ...mapConversationRow(row),
+      preview: toPreview(firstUser?.content),
+    };
+  });
+
+  return ConversationListResponseSchema.parse({ items });
 }
 
 export class CursorMessageNotFoundError extends Error {

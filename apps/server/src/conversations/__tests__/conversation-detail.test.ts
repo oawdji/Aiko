@@ -12,6 +12,7 @@ import {
   CursorMessageNotFoundError,
   MESSAGE_PAGE_LIMIT_MAX,
   getConversationDetail,
+  listConversations,
 } from '../service';
 
 const migrationsFolder = path.resolve(import.meta.dirname, '../../../drizzle');
@@ -51,14 +52,20 @@ function insertConversation(id: string, overrides: Partial<{ lastMessageAt: stri
   }).run();
 }
 
-function insertMessage(id: string, conversationId: string, createdAt: string, role: 'user' | 'assistant' = 'user') {
+function insertMessage(
+  id: string,
+  conversationId: string,
+  createdAt: string,
+  role: 'user' | 'assistant' = 'user',
+  content = `content-${id}`,
+) {
   handle.db.insert(messages).values({
     id,
     conversationId,
     agentId: DEFAULT_AGENT_ID,
     userId: LOCAL_USER_ID,
     role,
-    content: `content-${id}`,
+    content,
     status: 'complete',
     clientMessageId: role === 'user' ? `cmi_${id}` : null,
     errorCode: null,
@@ -163,6 +170,23 @@ describe('getConversationDetail (M2.3)', () => {
       CursorMessageNotFoundError,
     );
     expect(() => getConversationDetail(handle, 'conv_1', { beforeId: 'msg_mine' })).not.toThrow();
+  });
+
+  it('lists active conversations newest first and previews the first user message', () => {
+    insertConversation('conv_old', { lastMessageAt: ts(10) });
+    insertConversation('conv_new', { lastMessageAt: ts(40) });
+    insertConversation('conv_archived', { lastMessageAt: ts(90), isArchived: 1 });
+    insertMessage('msg_old_user', 'conv_old', ts(10), 'user', '较早的话题');
+    insertMessage('msg_new_assistant', 'conv_new', ts(20), 'assistant', '先到的助手消息');
+    insertMessage('msg_new_user', 'conv_new', ts(30), 'user', `  你好\n${'字'.repeat(90)}`);
+    insertMessage('msg_archived', 'conv_archived', ts(90), 'user', '已归档');
+
+    const response = listConversations(handle, DEFAULT_AGENT_ID);
+
+    const flat = `你好 ${'字'.repeat(90)}`;
+    expect(response.items.map((item) => item.id)).toEqual(['conv_new', 'conv_old']);
+    expect(response.items[0]?.preview).toBe(`${flat.slice(0, 80)}…`);
+    expect(response.items[1]?.preview).toBe('较早的话题');
   });
 
   it('rejects out-of-range limit', () => {

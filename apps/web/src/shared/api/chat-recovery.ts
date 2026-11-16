@@ -1,9 +1,11 @@
 import {
   BootstrapResponseSchema,
   ConversationDetailResponseSchema,
+  ConversationListResponseSchema,
   HealthResponseSchema,
   type BootstrapResponse,
   type ConversationDetailResponse,
+  type ConversationListResponse,
 } from '@aiko/shared';
 import { requestJson, type RequestOptions } from './client';
 
@@ -28,6 +30,14 @@ export type ConversationPageParams = {
   limit?: number;
   beforeId?: string;
 };
+
+export function fetchConversationList(
+  agentId?: string,
+  options: RequestOptions = {},
+): Promise<ConversationListResponse> {
+  const query = agentId ? `?agentId=${encodeURIComponent(agentId)}` : '';
+  return requestJson(`/conversations${query}`, ConversationListResponseSchema, options);
+}
 
 export function fetchConversation(
   conversationId: string,
