@@ -8,7 +8,7 @@ Aiko 是一个运行在本地的拟人化聊天 Agent。她不是“带聊天框
 
 - **稳定人格**：人格锚点（PERSONA_CORE）版本化管理，不可被聊天内容或 Prompt 注入篡改；
 - **可感知状态**：PAD 三维情绪模型（愉悦度 valence / 唤醒度 arousal / 支配度 dominance），每轮先向角色气质基线回归（OU 时间衰减），再叠加事件增量；每次变化都有原因、证据与事件记录；
-- **长期记忆**（规划中）：事实记忆、摘要与语义检索，全部对用户透明、可修正、可删除；
+- **长期记忆**：语义检索已完成本地化接入（bge-base-zh + SQLite 向量库）；事实记忆与摘要规划中，全部对用户透明、可修正、可删除；
 - **受控演化**（规划中）：人格调整必须经过“提案 → diff → 用户确认”流程；
 - **本地优先**：数据保存在本机 SQLite，不做云端同步，暂不实现登录与多用户。
 
@@ -23,7 +23,7 @@ Aiko 是一个运行在本地的拟人化聊天 Agent。她不是“带聊天框
 | Phase 1（MVP） | 消息持久化、会话恢复、状态引擎 | ✅ M1 / M2 / M3 完成，六项冒烟全过 |
 | M4 | PAD 三维情绪、OU 时间衰减引擎、角色级衰减参数、prompt 情绪注入 | ✅ 后端完成；情绪面板打磨（T7）进行中 |
 | Phase 2 | 长期记忆与透明性 | ⬜ 未开始 |
-| Phase 3 | 语义检索与受控人格演化 | ⬜ 未开始 |
+| Phase 3 | 语义检索（本地 bge-base-zh + SQLite 向量）后端全链路 | 🚨 检索模块完成（T1–T8）；受控人格演化未开始 |
 | Phase 4 | 主动行为与遗忘 | ⬜ 未开始 |
 
 ## 功能一览
@@ -57,6 +57,7 @@ Aiko 是一个运行在本地的拟人化聊天 Agent。她不是“带聊天框
 | [docs/database-schema.md](docs/database-schema.md) | 数据库设计：SQLite 表结构、约束、迁移与事务 |
 | [docs/react-architecture.md](docs/react-architecture.md) | React 架构：组件设计、状态边界、渲染隔离 |
 | [docs/persona-core-v1.md](docs/persona-core-v1.md) | 人格锚点 v1：PERSONA_CORE 正文与初始 evolvable 配置 |
+| [docs/semantic-retrieval-plan.md](docs/semantic-retrieval-plan.md) | 语义检索模块任务拆分与边界（T1–T8） |
 
 ## 项目结构
 
@@ -75,7 +76,7 @@ Aiko 是一个运行在本地的拟人化聊天 Agent。她不是“带聊天框
 │     └─ src/
 │        ├─ api/               # /api/health、/api/dev/mock-chat（仅开发环境）
 │        ├─ bootstrap/         # 会话恢复服务
-│        ├─ chat/              # 聊天编排 / 情绪词典与规则 / OU 衰减引擎 / prompt 情绪注入 / 引擎开关
+│        ├─ chat/              # 聊天编排 / 情绪词典与规则 / OU 衰减引擎 / prompt 情绪注入 / 语义记忆接入（memory-client）
 │        ├─ conversations/     # 会话详情与分页
 │        ├─ settings/          # LLM 设置服务与路由（DB 优先，热生效）
 │        ├─ llm/               # OpenAI 兼容 Provider（按配置键缓存）
@@ -83,6 +84,9 @@ Aiko 是一个运行在本地的拟人化聊天 Agent。她不是“带聊天框
 │        └─ config/            # 服务 / LLM / 数据目录环境变量校验
 ├─ packages/
 │  └─ shared/                  # Zod schema（单一事实来源）与共享类型
+├─ services/
+│  ├─ embedding/               # bge-base-zh embedding 封装（惰性加载，CPU 即可）
+│  └─ retrieval/               # SQLite 向量存储 / 对话切片 / 检索组装 / JSON CLI
 ├─ data/                       # 本地 SQLite 数据（不入库）
 └─ docs/                       # 设计文档
 ```
@@ -110,6 +114,35 @@ pnpm gen:persona   # 从 docs/persona-core-v1.md 重新生成锚点模块
 
 如偏好环境变量：复制 `apps/server/.env.example` 为 `apps/server/.env` 填入 `LLM_API_KEY`。配置优先级为：设置面板（`app_settings` 表）> 环境变量 > DeepSeek 默认值；切换第三方中转站只需在设置面板修改 Base URL 与模型。
 
+## 语义检索(Phase 3 首批)
+
+对话结束后自动写入长期记忆,构造 prompt 时按语义召回相关历史注入 system prompt。检索失败一律降级为空结果,不影响聊天。
+
+| 文件 | 职责 |
+|---|---|
+| `services/embedding/embedder.py` | bge-base-zh-v1.5 封装(惰性加载,归一化 768 维输出;全链路唯一出现模型名的地方) |
+| `services/retrieval/store.py` | SQLite 向量持久化 + 全量余弦检索 |
+| `services/retrieval/chunker.py` | 对话按轮切片,超长句子二次切分 |
+| `services/retrieval/local_retriever.py` | 组装以上三者,实现 MemoryRetriever 契约 |
+| `services/retrieval/cli.py` | JSON stdin/stdout 粘合层 |
+| `apps/server/src/chat/memory-client.ts` | TS 子进程客户端,首次失败进程内禁用 |
+| `apps/server/src/config/memory.ts` | 环境变量配置(全默认值) |
+
+契约类型定义在 `packages/shared/src/types/retrieval.ts`,任务拆分见 `docs/semantic-retrieval-plan.md`。
+
+**开发机首次运行**(本模块需要 Python 3.10+):
+
+```bash
+pip install -r services/embedding/requirements.txt
+# 国内网络建议先设置 HF 镜像(模型约 400MB,首次运行自动下载)
+$env:HF_ENDPOINT = "https://hf-mirror.com"   # PowerShell
+python services/embedding/embedder.py        # 冒烟:期望 shape (2, 768)
+python services/retrieval/local_retriever.py # 冒烟:期望 smoke OK(无需模型)
+```
+
+未安装 Python/模型时聊天完全不受影响(自动降级)。配置项(`EMBEDDING_MODEL_NAME` / `EMBEDDING_DEVICE` / `MEMORY_DB_PATH` / `MEMORY_TOP_K` 等)见 `apps/server/.env.example`。
+
+已知限制:全量余弦检索约 10 万条内毫秒级,超过需把 `store.py` 换成 FAISS(只换一个文件);每轮入库为同步子进程调用,若成瓶颈可将 CLI 升级为常驻 HTTP 服务(只改 `memory-client.ts`)。
 ## 安全与隐私
 
 - 本地单用户应用，后端仅监听 `127.0.0.1`，不暴露到局域网或公网；
