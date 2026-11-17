@@ -135,12 +135,16 @@ describe('memories table constraints (S1)', () => {
     handle.sqlite.close();
   });
 
-  it('restricts deleting a message that is a memory source', () => {
+  it('nulls memory source when the source message is deleted (0004 SET NULL)', () => {
     const handle = freshDb();
     insertMemory(handle);
     expect(() =>
       handle.sqlite.prepare(`DELETE FROM messages WHERE id = 'msg_1'`).run(),
-    ).toThrow();
+    ).not.toThrow();
+    const row = handle.sqlite
+      .prepare(`SELECT source_message_id FROM memories WHERE id = 'mem_1'`)
+      .get() as { source_message_id: string | null };
+    expect(row.source_message_id).toBeNull();
     handle.sqlite.close();
   });
 });

@@ -76,6 +76,7 @@ function makeFakeMemory(hits: string[]): {
       async indexDialogue(messages) {
         indexCalls.push(messages.map((m) => m.content));
       },
+      async clearVectors() {},
     },
   };
 }
@@ -134,6 +135,9 @@ describe('chat pipeline memory integration (T7)', () => {
       async indexDialogue() {
         throw new Error('python missing');
       },
+      async clearVectors() {
+        throw new Error('python missing');
+      },
     };
     const pipeline = await runChatPipeline(
       handle,
@@ -156,6 +160,7 @@ describe('chat pipeline memory integration (T7)', () => {
         return [];
       },
       async indexDialogue() {},
+      async clearVectors() {},
     };
     void spy;
     const pipeline = await runChatPipeline(

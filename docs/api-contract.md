@@ -689,6 +689,19 @@ export type ConversationDetailResponse = {
 
 ---
 
+## 8.5 `DELETE /api/conversations/:id` 与 `DELETE /api/conversations`
+
+删除单个会话 / 清空全部会话（本地单用户，无认证）。
+
+- 响应：`{ "ok": true, "deletedAt": "<ISO 8601>", "count": <删除会话数> }`；
+- 单会话不存在返回 `404 CONVERSATION_NOT_FOUND`；
+- 级联清理：消息、状态事件、会话摘要、Prompt 快照（单事务）；
+- **长期记忆保留**：`memories.source_message_id` 为可空列（`ON DELETE SET NULL`），会话删除后来源链接自动解除；
+- `DELETE /api/conversations`（清空全部）会同时清空语义向量库中的对话原文切片（向量库不可用时降级跳过，不影响主流程）；
+- 单会话删除不清理该会话的向量切片（向量库无会话维度），全量清空时统一处理。
+
+---
+
 ## 9. `GET /api/agents/:agentId/state`
 
 ## 9.1 用途
@@ -1407,7 +1420,7 @@ agents 状态快照只变化一次
 
 以下接口不在 MVP 中实现，仅预留命名方向。
 
-## 22.1 记忆接口
+## 22.1 记忆接口（Phase 2 已实现）
 
 ```http
 GET    /api/memories
@@ -1415,7 +1428,18 @@ PATCH  /api/memories/:id
 DELETE /api/memories/:id
 POST   /api/memories/:id/confirm
 POST   /api/memories/:id/reject
+POST   /api/memories/:id/restore
+DELETE /api/memories
 ```
+
+`GET /api/memories` 支持 `status` / `type` / `q`（内容关键词，LIKE 包含匹配，`%`/`_`/`\` 自动转义）/ `limit` / `offset`；响应含 `total`（同过滤条件总数）；列表项含 `sourceContent` / `sourceConversationId`（来源消息联查）。
+
+`DELETE /api/memories`（清空全部记忆）：
+
+- owner（userId + agentId）范围内**硬删除**全部记忆，并同步清空 `memories_fts` 全文索引，单事务；
+- 与单条 `DELETE /api/memories/:id`（软删除，可恢复）不同，本操作**不可恢复**；
+- 响应：`{ "ok": true, "clearedAt": "<ISO 8601>", "count": <清除条数> }`；空库幂等返回 `count: 0`；
+- 不影响人格锚点、对话消息与状态事件（全量清空见 §22.4 数据控制接口）。
 
 ## 22.2 人格接口
 

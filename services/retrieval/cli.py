@@ -3,6 +3,7 @@
 协议:stdin 一行 JSON,stdout 一行 JSON。
 - {"op": "index", "messages": [{"role", "content", "timestamp"?}, ...]} → {"ok": true, "indexed": n}
 - {"op": "search", "query": str, "top_k": int} → {"ok": true, "hits": [str, ...]}
+- {"op": "clear"} → {"ok": true, "cleared": n}
 任何失败输出 {"ok": false, "error": str} 并以退出码 1 结束(TS 侧据此降级)。
 """
 
@@ -33,6 +34,9 @@ def main() -> int:
         elif request.get("op") == "search":
             hits = retriever.search(request.get("query", ""), top_k=int(request.get("top_k", 5)))
             print(json.dumps({"ok": True, "hits": [h["text"] for h in hits]}, ensure_ascii=False))
+        elif request.get("op") == "clear":
+            cleared = retriever.clear()
+            print(json.dumps({"ok": True, "cleared": cleared}, ensure_ascii=False))
         else:
             print(json.dumps({"ok": False, "error": f"unknown op: {request.get('op')}"}, ensure_ascii=False))
             return 1

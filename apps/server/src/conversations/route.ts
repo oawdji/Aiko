@@ -4,9 +4,12 @@ import { getDb } from '../db';
 import {
   ConversationNotFoundError,
   CursorMessageNotFoundError,
+  clearConversations,
+  deleteConversation,
   getConversationDetail,
   listConversations,
 } from './service';
+import { createPythonMemoryClient } from '../chat/memory-client';
 
 /**
  * GET /api/conversations?agentId=
@@ -27,6 +30,26 @@ export const conversationsRoute = new Hono().get('/conversations', (c) => {
     return c.json(body, 400);
   }
   return c.json(listConversations(getDb(), parsedQuery.data.agentId));
+}).delete('/conversations', (c) => {
+  const result = clearConversations(getDb());
+  // 语义向量库存有对话原文切片，一并清空（向量库不可用则降级，不影响主流程）
+  void createPythonMemoryClient().clearVectors();
+  return c.json({ ok: true, deletedAt: result.deletedAt, count: result.count });
+}).delete('/conversations/:id', (c) => {
+  const id = c.req.param('id');
+  try {
+    const result = deleteConversation(getDb(), id);
+    return c.json({ ok: true, deletedAt: result.deletedAt, count: result.count });
+  } catch (error) {
+    if (error instanceof ConversationNotFoundError) {
+      const body: ApiError = {
+        code: 'CONVERSATION_NOT_FOUND',
+        message: `Conversation "${id}" not found`,
+      };
+      return c.json(body, 404);
+    }
+    throw error;
+  }
 }).get('/conversations/:id', (c) => {
   const conversationId = c.req.param('id');
 

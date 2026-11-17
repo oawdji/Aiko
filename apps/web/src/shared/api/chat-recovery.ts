@@ -1,9 +1,11 @@
 import {
   BootstrapResponseSchema,
+  ConversationDeleteResponseSchema,
   ConversationDetailResponseSchema,
   ConversationListResponseSchema,
   HealthResponseSchema,
   type BootstrapResponse,
+  type ConversationDeleteResponse,
   type ConversationDetailResponse,
   type ConversationListResponse,
 } from '@aiko/shared';
@@ -37,6 +39,27 @@ export function fetchConversationList(
 ): Promise<ConversationListResponse> {
   const query = agentId ? `?agentId=${encodeURIComponent(agentId)}` : '';
   return requestJson(`/conversations${query}`, ConversationListResponseSchema, options);
+}
+
+export function deleteConversation(
+  conversationId: string,
+  options: RequestOptions = {},
+): Promise<ConversationDeleteResponse> {
+  return requestJson(
+    `/conversations/${encodeURIComponent(conversationId)}`,
+    ConversationDeleteResponseSchema,
+    { ...options, method: 'DELETE' },
+  );
+}
+
+/** 清空全部会话（不可恢复，调用方需自行二次确认）。 */
+export function clearConversations(
+  options: RequestOptions = {},
+): Promise<ConversationDeleteResponse> {
+  return requestJson('/conversations', ConversationDeleteResponseSchema, {
+    ...options,
+    method: 'DELETE',
+  });
 }
 
 export function fetchConversation(

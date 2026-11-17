@@ -13,9 +13,15 @@ import { useAgentChat } from '../chat/hooks/use-agent-chat';
 import { extractStateEvents } from '../chat/utils/extract-state-events';
 import { DevChecklist } from './DevChecklist';
 import { SettingsDialog } from '../settings/components/SettingsDialog';
-import { fetchConversation, fetchConversationList } from '../shared/api/chat-recovery';
+import {
+  clearConversations,
+  deleteConversation,
+  fetchConversation,
+  fetchConversationList,
+} from '../shared/api/chat-recovery';
 import { fetchSettings } from '../shared/api/settings-api';
 import { MemoryViewer } from '../memories/components/MemoryViewer';
+import { fetchMemories } from '../shared/api/memories-api';
 import { StatusTimeline } from '../status/components/StatusTimeline';
 import { StatusPanel } from '../status/components/StatusPanel';
 import { ErrorNotice } from '../shared/components/ErrorNotice';
@@ -177,6 +183,35 @@ export function ChatView({ bootstrap }: { bootstrap: BootstrapResponse }) {
     [isBusy, opening, session.id],
   );
 
+  /** 删除单个会话：从列表移除；若是当前会话则切换到最近的其余会话，没有则重新 bootstrap。 */
+  const handleDeleteConversation = (id: string) => {
+    void deleteConversation(id)
+      .then(() => {
+        const rest = historyItems.filter((item) => item.id !== id);
+        setHistoryItems(rest);
+        if (id === session.id) {
+          const next = rest[0];
+          if (next) {
+            selectConversation(next.id);
+          } else {
+            window.location.reload();
+          }
+        }
+      })
+      .catch((error: unknown) => {
+        setOpenError(error instanceof Error ? error.message : '会话删除失败');
+      });
+  };
+
+  /** 清空全部会话（不可恢复）：清空后重新 bootstrap 获得全新会话。 */
+  const handleClearConversations = () => {
+    void clearConversations()
+      .then(() => window.location.reload())
+      .catch((error: unknown) => {
+        setOpenError(error instanceof Error ? error.message : '清空会话失败');
+      });
+  };
+
   const [llmSettings, setLlmSettings] = useState<SettingsResponse | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -193,6 +228,22 @@ export function ChatView({ bootstrap }: { bootstrap: BootstrapResponse }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [panelOpen, historyOpen, settingsOpen]);
   const [memoriesOpen, setMemoriesOpen] = useState(false);
+
+  // 待确认记忆数徽标：挂载时与查看器开关变化后刷新
+  const [candidateMemoryCount, setCandidateMemoryCount] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    fetchMemories({ status: 'candidate', limit: 1 })
+      .then((r) => {
+        if (!cancelled) setCandidateMemoryCount(r.total ?? 0);
+      })
+      .catch(() => {
+        // 徽标获取失败静默忽略，不影响聊天
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [memoriesOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -233,6 +284,8 @@ export function ChatView({ bootstrap }: { bootstrap: BootstrapResponse }) {
           error={historyError}
           disabled={isBusy || opening}
           onSelect={selectConversation}
+          onDelete={handleDeleteConversation}
+          onClearAll={handleClearConversations}
           onRetry={refreshHistory}
           onClose={() => setHistoryOpen(false)}
         />
@@ -282,6 +335,14 @@ export function ChatView({ bootstrap }: { bootstrap: BootstrapResponse }) {
             className="shrink-0 rounded-lg border border-neutral-700 px-3 py-2 text-xs text-neutral-300 hover:bg-neutral-800"
           >
             🧠 记忆
+            {candidateMemoryCount > 0 && (
+              <span
+                aria-label={candidateMemoryCount + ' 条记忆待确认'}
+                className="ml-1 rounded-full bg-amber-500 px-1.5 text-[10px] font-semibold text-neutral-950"
+              >
+                {candidateMemoryCount}
+              </span>
+            )}
           </button>
           <button
             type="button"

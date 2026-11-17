@@ -47,7 +47,7 @@ describe('runMigrations', () => {
     const applied = handle.sqlite
       .prepare('SELECT COUNT(*) AS count FROM __drizzle_migrations')
       .get() as { count: number };
-    expect(applied.count).toBe(4);
+    expect(applied.count).toBe(5);
 
     handle.sqlite.close();
   });

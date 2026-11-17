@@ -291,6 +291,13 @@ export const LlmConnectionTestResponseSchema = z.object({
   errorCode: z.string().min(1).nullable(),
 });
 
+/** DELETE /api/conversations[/:id] 响应（会话删除/清空） */
+export const ConversationDeleteResponseSchema = z.object({
+  ok: z.literal(true),
+  deletedAt: z.string(),
+  count: z.number().int().min(0),
+});
+
 // ---------------------------------------------------------------------------
 // 静态类型（由 schema 推导，保证类型与校验规则一致）
 // ---------------------------------------------------------------------------
@@ -299,6 +306,7 @@ export type ChatMessageDTO = z.infer<typeof ChatMessageDTOSchema>;
 export type ConversationDTO = z.infer<typeof ConversationDTOSchema>;
 export type ConversationListItem = z.infer<typeof ConversationListItemSchema>;
 export type ConversationListResponse = z.infer<typeof ConversationListResponseSchema>;
+export type ConversationDeleteResponse = z.infer<typeof ConversationDeleteResponseSchema>;
 export type AgentDTO = z.infer<typeof AgentDTOSchema>;
 export type AgentStateEvent = z.infer<typeof AgentStateEventSchema>;
 export type AppSettings = z.infer<typeof AppSettingsSchema>;

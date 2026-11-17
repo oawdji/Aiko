@@ -101,6 +101,12 @@ class VectorStore:
         ).reshape(len(rows), -1)
         return rows, matrix
 
+    def clear(self) -> int:
+        """清空全部向量数据，返回删除条数（清空对话时由上层调用）。"""
+        with self._connect() as conn, conn:
+            cur = conn.execute("DELETE FROM memories")
+            return cur.rowcount
+
     def search(self, query_vector: np.ndarray, top_k: int = 5) -> list[StoredMemory]:
         """全量余弦检索。query_vector 需已归一化(T2 的 embed 输出满足)。
 

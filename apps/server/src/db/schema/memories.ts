@@ -25,9 +25,9 @@ export const memories = sqliteTable(
       .references(() => agents.id, { onDelete: 'cascade' }),
     type: text('type').notNull(),
     content: text('content').notNull(),
-    sourceMessageId: text('source_message_id')
-      .notNull()
-      .references(() => messages.id, { onDelete: 'restrict' }),
+    sourceMessageId: text('source_message_id').references(() => messages.id, {
+      onDelete: 'set null',
+    }),
     confidence: real('confidence').notNull(),
     status: text('status').notNull().default('candidate'),
     // 写入时的 PAD 快照（JSON: {v,a,d}，[-1,1]）
