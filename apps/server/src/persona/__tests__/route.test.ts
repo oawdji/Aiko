@@ -147,3 +147,37 @@ describe('persona route (P3)', () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe('persona core manual edit (P4.5)', () => {
+  it('GET /persona/core returns current core', async () => {
+    const res = await personaRoute.request('/persona/core');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { version: number; personaCoreHash: string; coreMd: string };
+    expect(body.version).toBeGreaterThan(0);
+    expect(body.coreMd.length).toBeGreaterThan(0);
+  });
+
+  it('PUT /persona/core updates core with new version (200)', async () => {
+    const res = await personaRoute.request('/persona/core', {
+      method: 'PUT',
+      body: JSON.stringify({ coreMd: '你是 Aiko。（路由编辑版）' }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; version: number; personaCoreHash: string };
+    expect(body.ok).toBe(true);
+    const get = await personaRoute.request('/persona/core');
+    const getBody = (await get.json()) as { version: number; coreMd: string };
+    expect(getBody.coreMd).toBe('你是 Aiko。（路由编辑版）');
+    expect(getBody.version).toBe(body.version);
+  });
+
+  it('PUT /persona/core rejects empty core (400)', async () => {
+    const res = await personaRoute.request('/persona/core', {
+      method: 'PUT',
+      body: JSON.stringify({ coreMd: '   ' }),
+    });
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as { code: string };
+    expect(body.code).toBe('PERSONA_PATCH_INVALID');
+  });
+});

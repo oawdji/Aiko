@@ -1451,6 +1451,18 @@ POST /api/persona/proposals/:id/reject
 POST /api/persona/versions/:version/rollback
 ```
 
+锚点手动编辑接口（本地所有者权限）：
+
+```http
+GET /persona/core
+PUT /persona/core
+```
+
+- `GET` 返回 `{ version, personaCoreHash, coreMd }`；
+- `PUT` 请求体 `{ coreMd }`（1~32000 字符），响应 `{ ok, version, personaCoreHash, evolvable }`；
+- 编辑以**追加式新版本**生效（沿用当前 evolvable），写入 `source=user_request` 审计记录；
+- 聊天/LLM/检索内容对锚点**无任何写路径**（F26 不变）；空正文返回 `400 PERSONA_CORE_INVALID`。
+
 ## 22.3 主动消息接口
 
 ```http

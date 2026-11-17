@@ -195,6 +195,7 @@ export const ApiErrorCodeSchema = z.enum([
   'PERSONA_RATE_LIMITED',
   'PERSONA_PATCH_INVALID',
   'PERSONA_NO_ACTIVE',
+  'PERSONA_CORE_INVALID',
 ]);
 
 export const ApiErrorSchema = z.object({

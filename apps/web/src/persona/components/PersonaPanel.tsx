@@ -2,12 +2,15 @@ import { useCallback, useEffect, useState } from 'react';
 import type { PersonaProposalDTO, PersonaVersionDTO } from '@aiko/shared';
 import {
   approvePersonaProposal,
+  fetchPersonaCore,
   fetchPersonaProposals,
   fetchPersonaVersions,
   proposePersona,
   rejectPersonaProposal,
   rollbackPersonaVersion,
 } from '../api/persona-api';
+import { type PersonaCoreResponse } from '@aiko/shared';
+import { CoreEditor } from './CoreEditor';
 import { StyleCard } from './StyleCard';
 import { ProposeForm } from './ProposeForm';
 import { ProposalCard } from './ProposalCard';
@@ -21,6 +24,7 @@ import { VersionHistory } from './VersionHistory';
 export function PersonaPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [versions, setVersions] = useState<PersonaVersionDTO[]>([]);
   const [proposals, setProposals] = useState<PersonaProposalDTO[]>([]);
+  const [core, setCore] = useState<PersonaCoreResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -29,9 +33,14 @@ export function PersonaPanel({ open, onClose }: { open: boolean; onClose: () => 
     setLoading(true);
     setError(null);
     try {
-      const [vs, ps] = await Promise.all([fetchPersonaVersions(), fetchPersonaProposals()]);
+      const [vs, ps, cr] = await Promise.all([
+        fetchPersonaVersions(),
+        fetchPersonaProposals(),
+        fetchPersonaCore(),
+      ]);
       setVersions(vs);
       setProposals(ps);
+      setCore(cr);
     } catch (e) {
       setError(e instanceof Error ? e.message : '加载失败');
     } finally {
@@ -141,6 +150,15 @@ export function PersonaPanel({ open, onClose }: { open: boolean; onClose: () => 
         ) : (
           <>
             {active && <StyleCard evolvable={active.evolvable} version={active.version} />}
+            <CoreEditor
+              core={core}
+              disabled={loading}
+              onSaved={(version) => {
+                setNotice('锚点已保存（当前 v' + version + '）');
+                void reload();
+              }}
+              onError={(message) => setError(message)}
+            />
             <ProposeForm disabled={loading} onSubmit={handlePropose} />
             {pending.length > 0 && (
               <section aria-label="待审提案" className="rounded-lg border border-neutral-800 bg-neutral-800/50 p-3">

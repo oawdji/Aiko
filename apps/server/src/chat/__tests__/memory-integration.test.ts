@@ -49,15 +49,6 @@ function fakeLlm(reply: string, captured?: { system?: string }): LlmStreamHandle
   };
 }
 
-/** 捕获 system prompt 的 fake factory。 */
-function capturingLlm(captured: { system: string }): LlmStreamHandle {
-  return {
-    text: Promise.resolve('好的'),
-    toUimessageStream: () =>
-      createUIMessageStream({ execute: ({ writer: w }) => { w.write({ type: 'text-start', id: 'f' }); w.write({ type: 'text-delta', id: 'f', delta: '好的' }); w.write({ type: 'text-end', id: 'f' }); } }) as never,
-  };
-}
-
 function makeFakeMemory(hits: string[]): {
   client: MemoryClient;
   searchCalls: string[];
@@ -114,8 +105,6 @@ describe('chat pipeline memory integration (T7)', () => {
           }) as never,
       };
     };
-    void capturingLlm;
-
     const pipeline = await runChatPipeline(handle, baseBody, NOW, factory, undefined, undefined, client);
     expect(searchCalls).toEqual(['我家宠物叫什么?']);
     expect(capturedSystem).toContain('[相关记忆]');

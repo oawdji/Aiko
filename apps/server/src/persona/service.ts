@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import {
   PERSONA_PENDING_MAX,
   PERSONA_PROPOSAL_COOLDOWN_MINUTES,
@@ -32,9 +33,9 @@ import { applyPatch, validatePatchLimits } from './patch';
 import { PERSONA_PROPOSE_SYSTEM_PROMPT, buildProposeUserPrompt } from './prompts';
 import {
   countPendingProposals,
+  getActivePersonaVersionRow,
   deactivateOtherPersonaVersions,
   getActivePersona,
-  getActivePersonaVersionRow,
   getLastProposalCreatedAt,
   getPersonaVersionRow,
   getProposalRow,
@@ -286,6 +287,70 @@ export function rollbackToVersion(
   })();
 
   return { version: newVersion, evolvable: targetEvolvable };
+}
+
+/** 读取当前活跃锚点正文（面板编辑用）。 */
+export function getPersonaCore(
+  handle: DbHandle,
+  agentId: string,
+): { version: number; personaCoreHash: string; coreMd: string } {
+  const row = getActivePersonaVersionRow(handle, agentId);
+  if (!row) throw new PersonaNoActivePersonaError(agentId);
+  return { version: row.version, personaCoreHash: row.personaCoreHash, coreMd: row.personaCoreMd };
+}
+
+/**
+ * 用户手动编辑锚点正文（本地所有者权限；F26 修订：仅此显式路径可写锚点）。
+ * 追加式版本化：插入新版本行（沿用当前 evolvable），hash 重算，并写审计提案记录。
+ */
+export function updatePersonaCore(
+  handle: DbHandle,
+  agentId: string,
+  coreMdRaw: string,
+  now: string,
+): { version: number; personaCoreHash: string; evolvable: PersonaEvolvable } {
+  const coreMd = coreMdRaw.trim();
+  if (coreMd.length === 0) {
+    throw new PersonaPatchError('锚点正文不能为空');
+  }
+  const personaCoreHash = createHash('sha256').update(coreMd, 'utf8').digest('hex');
+  const activeRow = getActivePersonaVersionRow(handle, agentId);
+  if (!activeRow) throw new PersonaNoActivePersonaError(agentId);
+  const evolvable = parseEvableJson(activeRow.evolvableJson);
+  if (!evolvable) throw new PersonaNoActivePersonaError(agentId);
+
+  const newVersion = getMaxPersonaVersion(handle, agentId) + 1;
+  handle.sqlite.transaction(() => {
+    // 顺序约束：先停用旧活跃行，再插入新 active 行（partial unique index）
+    deactivateOtherPersonaVersions(handle, agentId, newVersion);
+    insertPersonaVersionRow(handle, {
+      id: `persona_${randomUUID()}`,
+      agentId,
+      version: newVersion,
+      personaCoreMd: coreMd,
+      personaCoreHash,
+      evolvableJson: activeRow.evolvableJson,
+      isActive: 1,
+      createdAt: now,
+      activatedAt: now,
+    });
+    updateAgentPersonaPointer(handle, agentId, newVersion, now);
+    insertProposalRow(handle, {
+      id: `prop_${randomUUID()}`,
+      agentId,
+      baseVersion: activeRow.version,
+      requestText: '手动修改人格锚点',
+      patchJson: '{}',
+      diffSummary: `锚点正文更新（${coreMd.length} 字符），hash ${personaCoreHash.slice(0, 12)}…`,
+      status: 'approved',
+      source: 'user_request',
+      expiresAt: now,
+      createdAt: now,
+      reviewedAt: now,
+    });
+  })();
+
+  return { version: newVersion, personaCoreHash, evolvable };
 }
 
 // ---------------------------------------------------------------------------

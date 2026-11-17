@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { PersonaEvolvableFromDbSchema, type PersonaEvolvable } from '@aiko/shared';
-import { PERSONA_CORE_HASH, PERSONA_CORE_MD } from '../db/generated/persona-core';
 import {
   personaProposals,
   personaVersions,
@@ -55,12 +54,13 @@ export function getActivePersona(handle: DbHandle, agentId: string): ActivePerso
 }
 
 /**
- * 启动校验（F21）：活跃版本的锚点正文必须与生成常量完全一致。
- * 任何不一致（被篡改 / 版本错乱）都拒绝启动，防止人格漂移。
+ * 启动校验（F21 修订版）：活跃版本的锚点正文必须与其存储的 hash 自洽。
+ * 锚点正文允许用户在面板手动编辑（编辑走版本化，见 service.updatePersonaCore）；
+ * 校验只保证"内容未被绕过版本系统篡改"（正文与 hash 不一致 = 数据损坏或直接改库）。
  */
 export function assertPersonaCoreIntact(handle: DbHandle, agentId: string): void {
   const row = handle.db
-    .select({ md: personaVersions.personaCoreMd, version: personaVersions.version })
+    .select({ md: personaVersions.personaCoreMd, hash: personaVersions.personaCoreHash, version: personaVersions.version })
     .from(personaVersions)
     .where(and(eq(personaVersions.agentId, agentId), eq(personaVersions.isActive, 1)))
     .get();
@@ -68,9 +68,9 @@ export function assertPersonaCoreIntact(handle: DbHandle, agentId: string): void
     throw new PersonaCoreIntegrityError(`agent ${agentId} has no active persona version`);
   }
   const actual = createHash('sha256').update(row.md, 'utf8').digest('hex');
-  if (row.md !== PERSONA_CORE_MD || actual !== PERSONA_CORE_HASH) {
+  if (actual !== row.hash) {
     throw new PersonaCoreIntegrityError(
-      `active persona v${row.version} core hash ${actual} != generated ${PERSONA_CORE_HASH}`,
+      `active persona v${row.version} core content hash ${actual} != stored ${row.hash}`,
     );
   }
 }

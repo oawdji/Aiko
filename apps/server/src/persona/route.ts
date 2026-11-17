@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import {
   DEFAULT_AGENT_ID,
+  PersonaCoreUpdateBodySchema,
   PersonaProposeBodySchema,
   PersonaProposalStatusSchema,
   type ApiError,
@@ -9,11 +10,13 @@ import {
 import { getDb } from '../db';
 import {
   approveProposal,
+  getPersonaCore,
   listPersonaVersions,
   listProposals,
   proposePersona,
   rejectProposal,
   rollbackToVersion,
+  updatePersonaCore,
 } from './service';
 import {
   PersonaBaseChangedError,
@@ -124,6 +127,37 @@ export const personaRoute = new Hono()
         new Date().toISOString(),
       );
       return c.json(proposal);
+    } catch (error) {
+      return handleError(c, error);
+    }
+  })
+  .get('/persona/core', (c) => {
+    try {
+      const core = getPersonaCore(getDb(), resolveAgentId(c.req.query('agentId')));
+      return c.json(core);
+    } catch (error) {
+      return handleError(c, error);
+    }
+  })
+  .put('/persona/core', async (c) => {
+    let raw: unknown;
+    try {
+      raw = JSON.parse(await c.req.text());
+    } catch {
+      return c.json(errorBody('INVALID_REQUEST', 'Request body must be valid JSON'), 400);
+    }
+    const parsed = PersonaCoreUpdateBodySchema.safeParse(raw);
+    if (!parsed.success) {
+      return c.json(errorBody('PERSONA_CORE_INVALID', '锚点正文不能为空且不超过 32000 字符'), 400);
+    }
+    try {
+      const result = updatePersonaCore(
+        getDb(),
+        parsed.data.agentId ?? DEFAULT_AGENT_ID,
+        parsed.data.coreMd,
+        new Date().toISOString(),
+      );
+      return c.json({ ok: true, version: result.version, personaCoreHash: result.personaCoreHash, evolvable: result.evolvable });
     } catch (error) {
       return handleError(c, error);
     }

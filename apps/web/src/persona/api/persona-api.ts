@@ -1,8 +1,10 @@
 import {
+  PersonaCoreResponseSchema,
   PersonaMutationResponseSchema,
   PersonaProposalDTOSchema,
   PersonaProposalListResponseSchema,
   PersonaVersionListResponseSchema,
+  type PersonaCoreResponse,
   type PersonaMutationResponse,
   type PersonaProposalDTO,
   type PersonaProposalStatus,
@@ -76,5 +78,23 @@ export function rollbackPersonaVersion(
   return requestJson(`/persona/versions/${version}/rollback`, PersonaMutationResponseSchema, {
     ...options,
     method: 'POST',
+  });
+}
+
+export function fetchPersonaCore(
+  options: RequestOptions = {},
+): Promise<PersonaCoreResponse> {
+  return requestJson('/persona/core', PersonaCoreResponseSchema, options);
+}
+
+/** 手动编辑锚点正文（版本化生效，历史可回滚）。 */
+export function updatePersonaCore(
+  coreMd: string,
+  options: RequestOptions = {},
+): Promise<PersonaMutationResponse> {
+  return requestJson('/persona/core', PersonaMutationResponseSchema, {
+    ...options,
+    method: 'PUT',
+    body: { coreMd },
   });
 }

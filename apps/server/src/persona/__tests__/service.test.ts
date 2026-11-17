@@ -1,5 +1,5 @@
 import { mkdtempSync, rmSync } from 'node:fs';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -8,11 +8,13 @@ import { createDb, type DbHandle } from '../../db/client';
 import { runMigrations } from '../../db/migrate';
 import { seedDefaultData } from '../../db/seed';
 import {
+  assertPersonaCoreIntact,
   deactivateOtherPersonaVersions,
   getActivePersona,
   getActivePersonaVersionRow,
   getProposalRow,
   insertPersonaVersionRow,
+  PersonaCoreIntegrityError,
   updateAgentPersonaPointer,
 } from '../repository';
 import {
@@ -22,6 +24,7 @@ import {
   proposePersona,
   rejectProposal,
   rollbackToVersion,
+  updatePersonaCore,
 } from '../service';
 import type { PersonaCompleteFn } from '../llm';
 
@@ -278,5 +281,41 @@ describe('queries', () => {
     const versions = listPersonaVersions(handle, DEFAULT_AGENT_ID);
     expect(versions.length).toBe(2);
     expect(versions[0]!.version).toBe(2);
+  });
+});
+
+describe('updatePersonaCore (锚点手动编辑)', () => {
+  it('creates new version with new core, keeps evolvable, writes audit', () => {
+    const before = getActivePersona(handle, DEFAULT_AGENT_ID)!;
+    const newCore = '你是 Aiko。（用户手动修改版）\n\n保持温和自然。';
+    const r = updatePersonaCore(handle, DEFAULT_AGENT_ID, newCore, hour(10));
+    const expectHash = createHash('sha256').update(newCore, 'utf8').digest('hex');
+    // beforeEach 已重置到 v1，手动编辑产生 v2
+    expect(r.version).toBe(2);
+    expect(r.personaCoreHash).toBe(expectHash);
+
+    const active = getActivePersona(handle, DEFAULT_AGENT_ID)!;
+    expect(active.version).toBe(2);
+    expect(active.personaCoreMd).toContain('用户手动修改版');
+    // evolvable 沿用不变
+    expect(active.evolvable).toEqual(before.evolvable);
+
+    const audits = listProposals(handle, DEFAULT_AGENT_ID, { status: 'approved' });
+    const audit = audits.find((a) => a.requestText === '手动修改人格锚点');
+    expect(audit).toBeDefined();
+  });
+
+  it('rejects empty core text', () => {
+    expect(() => updatePersonaCore(handle, DEFAULT_AGENT_ID, '   ', hour(11))).toThrow(/不能为空/);
+  });
+
+  it('integrity passes after legitimate edit, fails after raw tamper', () => {
+    expect(() => assertPersonaCoreIntact(handle, DEFAULT_AGENT_ID)).not.toThrow();
+    handle.sqlite
+      .prepare('UPDATE persona_versions SET persona_core_md = ' + "'raw tamper'" + ' WHERE is_active = 1')
+      .run();
+    expect(() => assertPersonaCoreIntact(handle, DEFAULT_AGENT_ID)).toThrow(
+      PersonaCoreIntegrityError,
+    );
   });
 });

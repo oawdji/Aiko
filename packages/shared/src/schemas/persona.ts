@@ -51,6 +51,22 @@ export const PersonaProposeBodySchema = z.object({
 });
 export type PersonaProposeBody = z.infer<typeof PersonaProposeBodySchema>;
 
+export const PERSONA_CORE_MAX_LEN = 32000;
+
+/** 用户手动编辑锚点正文（本地所有者权限；聊天/LLM/检索内容仍无修改权限）。 */
+export const PersonaCoreUpdateBodySchema = z.object({
+  agentId: z.string().optional(),
+  coreMd: z.string().min(1).max(PERSONA_CORE_MAX_LEN),
+});
+export type PersonaCoreUpdateBody = z.infer<typeof PersonaCoreUpdateBodySchema>;
+
+export const PersonaCoreResponseSchema = z.object({
+  version: z.number().int().min(1),
+  personaCoreHash: z.string(),
+  coreMd: z.string(),
+});
+export type PersonaCoreResponse = z.infer<typeof PersonaCoreResponseSchema>;
+
 export const PersonaProposalStatusSchema = z.enum([
   'pending',
   'approved',
