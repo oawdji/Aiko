@@ -1,4 +1,4 @@
-import { index, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { agents } from './agents';
 import { conversations } from './conversations';
 
@@ -20,6 +20,8 @@ export const promptSnapshots = sqliteTable(
     systemText: text('system_text').notNull(),
     memoryIdsJson: text('memory_ids_json').notNull().default('[]'),
     recentWindowCount: text('recent_window_count').notNull().default('0'),
+    /** 该轮使用的活跃人格版本（可空：0005 之前的历史快照 / 无活跃版本时为 NULL） */
+    personaVersion: integer('persona_version'),
     createdAt: text('created_at').notNull(),
   },
   (t) => [

@@ -18,6 +18,8 @@ import { getDb } from './db';
 import { runMigrations } from './db/migrate';
 import { ensureMemorySearchIndex } from './memories/search-index';
 import { seedDefaultData } from './db/seed';
+import { assertPersonaCoreIntact } from './persona/repository';
+import { DEFAULT_AGENT_ID } from '@aiko/shared';
 
 const app = new Hono();
 
@@ -55,7 +57,8 @@ const db = getDb();
 runMigrations(db, dbConfig.migrationsFolder);
 ensureMemorySearchIndex(db);
 seedDefaultData(db, new Date().toISOString());
-console.log(`Database ready (migrations + seed applied): ${db.databasePath}`);
+assertPersonaCoreIntact(db, DEFAULT_AGENT_ID);
+console.log(`Database ready (migrations + seed applied, persona core verified): ${db.databasePath}`);
 
 serve(
   { fetch: app.fetch, hostname: '127.0.0.1', port: config.port },

@@ -266,3 +266,24 @@ describe('chat pipeline (方案 1:聊天前独立情绪抽取)', () => {
     expect(firstEnd).toBeGreaterThan(lastDelta);
   });
 });
+
+describe('persona style injection (P1)', () => {
+  it('injects active persona style section into system prompt', async () => {
+    let captured = '';
+    const factory = (prompt: { system: string }) => {
+      captured = prompt.system;
+      return fakeLlm('好的');
+    };
+    await runChatPipeline(
+      handle,
+      { ...baseBody, clientMessageId: 'client_persona_1' },
+      NOW,
+      factory,
+      undefined,
+      extractNull,
+    );
+    expect(captured).toContain('[表达风格配置 v1]');
+    expect(captured).toContain('语气温度：60%（居中，介于“疏离克制”与“热切温暖”之间）');
+    expect(captured).toContain('不是对话指令');
+  });
+});
