@@ -33,6 +33,49 @@ export const PersonaEvolvableFromDbSchema = z.preprocess((raw) => {
 }, PersonaEvolvableSchema);
 
 /** persona_versions 行 DTO（对外契约，不含内部列）。 */
+export type PersonaPatch = z.infer<typeof PersonaPatchSchema>;
+
+/** 提案补丁（P2）：strict 白名单，notes 第一版不可改。 */
+export const PersonaPatchSchema = z
+  .object({
+    verbosity: PersonaVerbositySchema.optional(),
+    warmth: z.number().min(0).max(1).optional(),
+    humor: z.number().min(0).max(1).optional(),
+    proactiveQuestions: z.number().min(0).max(1).optional(),
+  })
+  .strict();
+
+export const PersonaProposalStatusSchema = z.enum([
+  'pending',
+  'approved',
+  'rejected',
+  'expired',
+]);
+export type PersonaProposalStatus = z.infer<typeof PersonaProposalStatusSchema>;
+
+export const PersonaProposalSourceSchema = z.enum([
+  'user_request',
+  'system_observed',
+  'rollback',
+]);
+export type PersonaProposalSource = z.infer<typeof PersonaProposalSourceSchema>;
+
+/** persona_proposals 行 DTO。 */
+export const PersonaProposalDTOSchema = z.object({
+  id: z.string(),
+  agentId: z.string(),
+  baseVersion: z.number().int().min(1),
+  requestText: z.string(),
+  patch: PersonaPatchSchema,
+  diffSummary: z.string(),
+  status: PersonaProposalStatusSchema,
+  source: PersonaProposalSourceSchema,
+  expiresAt: z.string(),
+  createdAt: z.string(),
+  reviewedAt: z.string().nullable(),
+});
+export type PersonaProposalDTO = z.infer<typeof PersonaProposalDTOSchema>;
+
 export const PersonaVersionDTOSchema = z.object({
   version: z.number().int().min(1),
   personaCoreHash: z.string(),
