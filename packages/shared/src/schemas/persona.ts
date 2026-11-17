@@ -45,6 +45,12 @@ export const PersonaPatchSchema = z
   })
   .strict();
 
+export const PersonaProposeBodySchema = z.object({
+  agentId: z.string().optional(),
+  requestText: z.string().min(1).max(2000),
+});
+export type PersonaProposeBody = z.infer<typeof PersonaProposeBodySchema>;
+
 export const PersonaProposalStatusSchema = z.enum([
   'pending',
   'approved',

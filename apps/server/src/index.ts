@@ -10,6 +10,7 @@ import { settingsRoute } from './settings/route';
 import { memoriesRoute } from './memories/route';
 import { stateTimelineRoute } from './state-timeline/route';
 import { dataControlRoute } from './data-control/route';
+import { personaRoute } from './persona/route';
 import { devMockChatRoute } from './api/dev-mock-chat';
 import { loadServerConfig } from './config/server';
 import { loadDbConfig } from './config/db';
@@ -38,6 +39,7 @@ app.route('/api', settingsRoute);
 app.route('/api', memoriesRoute);
 app.route('/api', stateTimelineRoute);
 app.route('/api', dataControlRoute);
+app.route('/api', personaRoute);
 // mock 端点仅限开发环境，不随生产构建暴露
 if (process.env.NODE_ENV !== 'production') {
   app.route('/api', devMockChatRoute);

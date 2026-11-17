@@ -18,6 +18,7 @@ import type { DbHandle } from '../db/client';
 import { PERSONA_CORE_MD } from '../db/generated/persona-core';
 import { getActivePersona } from '../persona/repository';
 import { renderPersonaStyleSection } from '../persona/render';
+import { looksLikeStyleAdjustment } from '../persona/intent';
 import { agents, conversations, messages, stateEvents } from '../db/schema';
 import { type PromptMessage } from './recent-window';
 import {
@@ -408,7 +409,12 @@ export async function runChatPipeline(
   }
 
   // S3b：fire-and-forget 事实抽取（写入层），失败不影响聊天流
-  const memoryExtraction = scheduleFactExtraction(
+  // 受控人格演化 P3：风格调整意图的消息不进事实抽取，
+  // 避免"既生成提案参数、又沉淀偏好记忆"的双轨生效（F25/F26 边界）
+  const isStyleAdjustment = looksLikeStyleAdjustment(body.message);
+  const memoryExtraction = isStyleAdjustment
+    ? Promise.resolve(0)
+    : scheduleFactExtraction(
     handle,
     {
       owner: { userId: LOCAL_USER_ID, agentId: persisted.agentId },

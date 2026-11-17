@@ -187,6 +187,14 @@ export const ApiErrorCodeSchema = z.enum([
   'RATE_LIMITED',
   'LLM_REQUEST_FAILED',
   'INTERNAL_ERROR',
+  // 受控人格演化（P3）
+  'PERSONA_PROPOSAL_NOT_FOUND',
+  'PERSONA_VERSION_NOT_FOUND',
+  'PERSONA_PROPOSAL_STATE',
+  'PERSONA_BASE_CHANGED',
+  'PERSONA_RATE_LIMITED',
+  'PERSONA_PATCH_INVALID',
+  'PERSONA_NO_ACTIVE',
 ]);
 
 export const ApiErrorSchema = z.object({
