@@ -10,3 +10,4 @@ export type { MemoryHit, MemoryMetadata, MemoryRetriever } from './types/retriev
 export * from './schemas/memory';
 export * from './schemas/persona';
 export * from './constants/persona';
+export * from './schemas/proactive';

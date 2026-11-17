@@ -196,6 +196,8 @@ export const ApiErrorCodeSchema = z.enum([
   'PERSONA_PATCH_INVALID',
   'PERSONA_NO_ACTIVE',
   'PERSONA_CORE_INVALID',
+  // Phase 4 主动行为
+  'PROACTIVE_CONVERSATION_NOT_FOUND',
 ]);
 
 export const ApiErrorSchema = z.object({
