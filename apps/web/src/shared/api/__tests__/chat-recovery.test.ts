@@ -38,6 +38,7 @@ const okBootstrap = {
     recentWindowRounds: 15,
     maxContextMessages: 30,
     theme: 'system',
+    proactive: { enabled: false, idleMinutes: 30, maxPer24h: 3, quietStart: '22:00', quietEnd: '08:00', minIntervalMinutes: 60 },
   },
 };
 

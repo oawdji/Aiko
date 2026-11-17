@@ -133,12 +133,25 @@ export const AgentStateEventSchema = z
 export const AppThemeSchema = z.enum(['light', 'dark', 'system']);
 export type AppTheme = z.infer<typeof AppThemeSchema>;
 
+const HHMM_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+export const ProactiveSettingsSchema = z.object({
+  enabled: z.boolean(),
+  idleMinutes: z.number().int().min(1).max(1440),
+  maxPer24h: z.number().int().min(1).max(50),
+  quietStart: z.string().regex(HHMM_PATTERN),
+  quietEnd: z.string().regex(HHMM_PATTERN),
+  minIntervalMinutes: z.number().int().min(0).max(1440),
+});
+export type ProactiveSettings = z.infer<typeof ProactiveSettingsSchema>;
+
 export const AppSettingsSchema = z
   .object({
     defaultAgentId: z.string().min(1),
     recentWindowRounds: z.number().int().min(10).max(15),
     maxContextMessages: z.number().int().min(20).max(30),
     theme: AppThemeSchema,
+    proactive: ProactiveSettingsSchema,
   })
   .refine(
     (settings) => settings.maxContextMessages === settings.recentWindowRounds * 2,
@@ -169,6 +182,7 @@ export const UpdateSettingsRequestBodySchema = z
     llmBaseUrl: z.string().url().optional(),
     llmModel: z.string().min(1).optional(),
     llmApiKey: z.string().min(1).nullable().optional(),
+    proactive: ProactiveSettingsSchema.partial().optional(),
   })
   .refine(
     (body) =>

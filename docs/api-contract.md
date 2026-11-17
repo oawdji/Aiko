@@ -1507,13 +1507,26 @@ PUT  /api/persona/core
 3. 锚点编辑产生新版本后，落后提案 approve 返回 409 需重新生成；
 4. 历史版本不可物理覆盖；回滚为追加式。
 
-## 22.3 主动消息接口
+## 22.3 主动消息接口（Phase 4 已实现）
 
 ```http
 POST /api/proactive/evaluate
+GET  /api/proactive/history?agentId=&limit=
 ```
 
-只在浏览器页面打开期间由前端调用，不作为后端离线调度入口。
+**POST /proactive/evaluate**（前端空闲计时器触发；仅页面存活期间）：
+
+- 请求体：`{ conversationId, localMinutesOfDay (0–1439), agentId? }`；
+- 响应：`{ send: boolean, reason: string|null, message: { id, conversationId, content, strategy, createdAt } | null }`；
+- 时机策略（服务端复验）：开关（默认关）→ 滚动 24h 上限（默认 3）→ 最小间隔（默认 60min）→ 免打扰时段（默认 22:00–08:00，跨午夜支持）→ 空闲阈值（默认 30min）；
+- 内容策略（按优先级）：情绪关怀（上次负面情绪 ≥24h 沉淀且未跟进）→ 记忆回想（≥7 天未访问的 active 记忆）→ 好奇提问（最近话题兜底）；全部不满足 → send=false（no_strategy）；
+- 命中时：assistant 消息写入 `messages`（metadata 标记 proactive/strategy/evidence）+ `proactive_messages` 审计；
+- 生成失败降级为 send=false（generation_failed），不重试；
+- **无状态决策：被抑制不落库、不补发**；页面关闭/刷新后前端计时器消失，天然不触发。
+
+**GET /proactive/history**：`{ messages: Array<{ id, conversationId, strategy, evidenceText, createdAt, content }> }`（新→旧，含正文）。
+
+**配置**：经 `PATCH /api/settings` 的 `proactive` 字段（enabled/idleMinutes/maxPer24h/quietStart/quietEnd/minIntervalMinutes），默认值见 seed。
 
 ## 22.4 数据控制接口
 
