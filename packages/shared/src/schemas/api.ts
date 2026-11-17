@@ -37,6 +37,14 @@ export const IsoDateTimeSchema = z.string().datetime({ offset: false });
 // 核心实体 DTO
 // ---------------------------------------------------------------------------
 
+export const ChatMessageMetadataSchema = z
+  .object({
+    proactive: z.boolean().optional(),
+    strategy: z.string().optional(),
+  })
+  .optional();
+export type ChatMessageMetadata = z.infer<typeof ChatMessageMetadataSchema>;
+
 export const ChatMessageDTOSchema = z.object({
   id: z.string().min(1),
   conversationId: z.string().min(1),
@@ -46,6 +54,8 @@ export const ChatMessageDTOSchema = z.object({
   status: ChatMessageStatusSchema,
   errorCode: z.string().min(1).nullable(),
   createdAt: IsoDateTimeSchema,
+  /** 主动消息标记（Phase 4，可选新增字段） */
+  metadata: ChatMessageMetadataSchema,
 });
 
 export const ConversationDTOSchema = z.object({

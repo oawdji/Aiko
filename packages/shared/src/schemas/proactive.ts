@@ -40,6 +40,9 @@ export const ProactiveEvaluateResponseSchema = z.object({
 });
 export type ProactiveEvaluateResponse = z.infer<typeof ProactiveEvaluateResponseSchema>;
 
+/** 命中策略时返回的单条主动消息（hook 注入聊天流使用）。 */
+export type ProactiveMessageInfo = NonNullable<ProactiveEvaluateResponse['message']>;
+
 /** GET /api/proactive/history 响应（含正文，供历史查看）。 */
 export const ProactiveHistoryResponseSchema = z.object({
   messages: z.array(
