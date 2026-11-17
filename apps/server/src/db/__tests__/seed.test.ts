@@ -87,7 +87,13 @@ describe('seedDefaultData', () => {
     expect(byKey['recent_window_rounds']).toBe('15');
     expect(byKey['max_context_messages']).toBe('30');
     expect(byKey['theme']).toBe('"system"');
-    expect(rows).toHaveLength(5);
+    expect(byKey['proactive_enabled']).toBe('false');
+    expect(byKey['proactive_idle_minutes']).toBe('30');
+    expect(byKey['proactive_max_per_24h']).toBe('3');
+    expect(byKey['proactive_quiet_start']).toBe('"22:00"');
+    expect(byKey['proactive_quiet_end']).toBe('"08:00"');
+    expect(byKey['proactive_min_interval_minutes']).toBe('60');
+    expect(rows).toHaveLength(11);
     handle.sqlite.close();
   });
 
@@ -106,7 +112,7 @@ describe('seedDefaultData', () => {
 
     expect(count('agents')).toBe(1);
     expect(count('persona_versions')).toBe(1);
-    expect(count('app_settings')).toBe(5);
+    expect(count('app_settings')).toBe(11);
     handle.sqlite.close();
   });
 

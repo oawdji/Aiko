@@ -43,6 +43,13 @@
       "when": 1794878560207,
       "tag": "0005_persona_evolution",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1794904134285,
+      "tag": "0006_proactive",
+      "breakpoints": true
     }
   ]
 }

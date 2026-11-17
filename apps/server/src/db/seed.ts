@@ -18,6 +18,13 @@ const DEFAULT_SETTINGS: Array<[key: string, valueJson: string]> = [
   ['max_context_messages', JSON.stringify(30)],
   ['theme', JSON.stringify('system')],
   ['debug_mode', JSON.stringify(false)],
+  // Phase 4 主动行为：默认关闭（requirements.md 明确默认不主动）
+  ['proactive_enabled', JSON.stringify(false)],
+  ['proactive_idle_minutes', JSON.stringify(30)],
+  ['proactive_max_per_24h', JSON.stringify(3)],
+  ['proactive_quiet_start', JSON.stringify('22:00')],
+  ['proactive_quiet_end', JSON.stringify('08:00')],
+  ['proactive_min_interval_minutes', JSON.stringify(60)],
 ];
 
 /**
