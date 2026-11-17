@@ -21,6 +21,7 @@ import {
 } from '../shared/api/chat-recovery';
 import { fetchSettings } from '../shared/api/settings-api';
 import { MemoryViewer } from '../memories/components/MemoryViewer';
+import { PersonaPanel } from '../persona/components/PersonaPanel';
 import { fetchMemories } from '../shared/api/memories-api';
 import { StatusTimeline } from '../status/components/StatusTimeline';
 import { StatusPanel } from '../status/components/StatusPanel';
@@ -228,6 +229,7 @@ export function ChatView({ bootstrap }: { bootstrap: BootstrapResponse }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [panelOpen, historyOpen, settingsOpen]);
   const [memoriesOpen, setMemoriesOpen] = useState(false);
+  const [personaOpen, setPersonaOpen] = useState(false);
 
   // 待确认记忆数徽标：挂载时与查看器开关变化后刷新
   const [candidateMemoryCount, setCandidateMemoryCount] = useState(0);
@@ -346,6 +348,14 @@ export function ChatView({ bootstrap }: { bootstrap: BootstrapResponse }) {
           </button>
           <button
             type="button"
+            aria-label="打开人格面板"
+            onClick={() => setPersonaOpen(true)}
+            className="shrink-0 rounded-lg border border-neutral-700 px-3 py-2 text-xs text-neutral-300 hover:bg-neutral-800"
+          >
+            🎭 人格
+          </button>
+          <button
+            type="button"
             aria-label="打开设置"
             onClick={() => setSettingsOpen(true)}
             className="shrink-0 rounded-lg border border-neutral-700 px-3 py-2 text-xs text-neutral-300 hover:bg-neutral-800"
@@ -429,6 +439,7 @@ export function ChatView({ bootstrap }: { bootstrap: BootstrapResponse }) {
       />
 
       <MemoryViewer open={memoriesOpen} onClose={() => setMemoriesOpen(false)} />
+      <PersonaPanel open={personaOpen} onClose={() => setPersonaOpen(false)} />
     </main>
   );
 }

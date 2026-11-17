@@ -82,6 +82,24 @@ export const PersonaProposalDTOSchema = z.object({
 });
 export type PersonaProposalDTO = z.infer<typeof PersonaProposalDTOSchema>;
 
+export const PersonaProposalListResponseSchema = z.object({
+  proposals: z.array(z.lazy(() => PersonaProposalDTOSchema)),
+});
+export type PersonaProposalListResponse = z.infer<typeof PersonaProposalListResponseSchema>;
+
+export const PersonaVersionListResponseSchema = z.object({
+  versions: z.array(z.lazy(() => PersonaVersionDTOSchema)),
+});
+export type PersonaVersionListResponse = z.infer<typeof PersonaVersionListResponseSchema>;
+
+/** approve / rollback 的响应。 */
+export const PersonaMutationResponseSchema = z.object({
+  ok: z.boolean(),
+  version: z.number().int().min(1),
+  evolvable: PersonaEvolvableSchema,
+});
+export type PersonaMutationResponse = z.infer<typeof PersonaMutationResponseSchema>;
+
 export const PersonaVersionDTOSchema = z.object({
   version: z.number().int().min(1),
   personaCoreHash: z.string(),
