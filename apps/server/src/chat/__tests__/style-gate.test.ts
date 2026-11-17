@@ -83,9 +83,9 @@ describe('style adjustment extraction gate (P3)', () => {
       .prepare('SELECT COUNT(*) AS n FROM persona_proposals')
       .get() as { n: number };
     expect(proposals.n).toBe(0);
-    const v1 = handle.sqlite
-      .prepare('SELECT evolvable_json FROM persona_versions WHERE version = 1')
+    const activeRow = handle.sqlite
+      .prepare('SELECT evolvable_json FROM persona_versions WHERE is_active = 1')
       .get() as { evolvable_json: string };
-    expect(v1.evolvable_json).toContain('"warmth": 0.6');
+    expect(activeRow.evolvable_json).toContain('"warmth": 0.7');
   });
 });

@@ -26,10 +26,10 @@ describe('persona repository (P1)', () => {
   it('returns active v1 with normalized evolvable (snake_case legacy)', () => {
     const p = getActivePersona(handle, DEFAULT_AGENT_ID);
     expect(p).not.toBeNull();
-    expect(p!.version).toBe(1);
+    expect(p!.version).toBe(2);
     expect(p!.evolvable.verbosity).toBe('balanced');
-    expect(p!.evolvable.warmth).toBe(0.6);
-    expect(p!.evolvable.proactiveQuestions).toBe(0.4);
+    expect(p!.evolvable.warmth).toBe(0.7);
+    expect(p!.evolvable.proactiveQuestions).toBe(0.6);
     expect(p!.evolvable.notes).toEqual([]);
   });
 
@@ -43,7 +43,7 @@ describe('persona repository (P1)', () => {
 
   it('throws when active core is tampered', () => {
     handle.sqlite
-      .prepare("UPDATE persona_versions SET persona_core_md = '被篡改的锚点' WHERE version = 1")
+      .prepare("UPDATE persona_versions SET persona_core_md = '被篡改的锚点' WHERE version = 2")
       .run();
     expect(() => assertPersonaCoreIntact(handle, DEFAULT_AGENT_ID)).toThrow(
       PersonaCoreIntegrityError,

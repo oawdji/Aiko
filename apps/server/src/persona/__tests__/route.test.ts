@@ -94,7 +94,7 @@ describe('persona route (P3)', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { code: string; status: string; ok: boolean; version: number; evolvable: { verbosity: string }; proposals: unknown[]; versions: { version: number }[] };
     expect(body.ok).toBe(true);
-    expect(body.version).toBe(2);
+    expect(body.version).toBe(3);
     expect(body.evolvable.verbosity).toBe('concise');
   });
 
@@ -131,11 +131,11 @@ describe('persona route (P3)', () => {
     const res = await personaRoute.request('/persona/versions');
     expect(res.status).toBe(200);
     const body = (await res.json()) as { code: string; status: string; ok: boolean; version: number; evolvable: { verbosity: string }; proposals: unknown[]; versions: { version: number }[] };
-    expect(body.versions[0]!.version).toBeGreaterThan(1);
+    expect(body.versions[0]!.version).toBeGreaterThan(2);
   });
 
   it('POST /persona/versions/1/rollback creates a new version (200)', async () => {
-    const res = await post('/persona/versions/1/rollback');
+    const res = await post('/persona/versions/2/rollback');
     expect(res.status).toBe(200);
     const body = (await res.json()) as { code: string; status: string; ok: boolean; version: number; evolvable: { verbosity: string }; proposals: unknown[]; versions: { version: number }[] };
     expect(body.ok).toBe(true);

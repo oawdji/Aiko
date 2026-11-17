@@ -63,7 +63,8 @@ Aiko 是一个运行在本地的拟人化聊天 Agent。她不是“带聊天框
 | [docs/api-contract.md](docs/api-contract.md) | API 契约：接口定义、错误码、流式协议、幂等策略、实测记录 |
 | [docs/database-schema.md](docs/database-schema.md) | 数据库设计：SQLite 表结构、约束、迁移与事务 |
 | [docs/react-architecture.md](docs/react-architecture.md) | React 架构：组件设计、状态边界、渲染隔离 |
-| [docs/persona-core-v1.md](docs/persona-core-v1.md) | 人格锚点 v1：PERSONA_CORE 正文与初始 evolvable 配置 |
+| [docs/persona-core-v2.md](docs/persona-core-v2.md) | 人格锚点 v2（当前）：十六岁文学少女形象，真人化语气 |
+| [docs/persona-core-v1.md](docs/persona-core-v1.md) | 人格锚点 v1（历史）：初始中性助理形象 |
 | [docs/semantic-retrieval-plan.md](docs/semantic-retrieval-plan.md) | 语义检索模块任务拆分与边界（T1–T8） |
 | [docs/memory-emotion-design.md](docs/memory-emotion-design.md) | 长期记忆与情感记忆设计：数据模型、检索评分、生命周期、实施步骤 |
 

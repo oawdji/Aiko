@@ -49,10 +49,10 @@ afterAll(() => {
 /** 每个用例独立状态：清空提案、删除 v2+ 版本、指针回到 v1（v1 行永不修改）。 */
 beforeEach(() => {
   handle.sqlite.prepare('DELETE FROM persona_proposals').run();
-  handle.sqlite.prepare('DELETE FROM persona_versions WHERE version > 1').run();
-  // 恢复 v1 活跃标记（此前用例可能已将其停用）
-  handle.sqlite.prepare('UPDATE persona_versions SET is_active = 1 WHERE version = 1').run();
-  updateAgentPersonaPointer(handle, DEFAULT_AGENT_ID, 1, T0);
+  handle.sqlite.prepare('DELETE FROM persona_versions WHERE version > 2').run();
+  // 恢复 v2 活跃标记（此前用例可能已将其停用）
+  handle.sqlite.prepare('UPDATE persona_versions SET is_active = 1 WHERE version = 2').run();
+  updateAgentPersonaPointer(handle, DEFAULT_AGENT_ID, 2, T0);
 });
 
 function hour(n: number): string {
@@ -71,9 +71,9 @@ describe('proposePersona', () => {
       makeComplete({ humor: 0.5 }),
     );
     expect(p.status).toBe('pending');
-    expect(p.baseVersion).toBe(1);
+    expect(p.baseVersion).toBe(2);
     expect(p.patch).toEqual({ humor: 0.5 });
-    expect(p.diffSummary).toContain('幽默程度：30% → 50%');
+    expect(p.diffSummary).toContain('幽默程度：45% → 50%');
     expect(p.source).toBe('user_request');
   });
 
@@ -148,39 +148,39 @@ describe('approveProposal', () => {
     );
     const reviewedAt = '2026-11-16T12:01:00.000Z';
     const r = approveProposal(handle, DEFAULT_AGENT_ID, p.id, reviewedAt);
-    expect(r.version).toBe(2);
+    expect(r.version).toBe(3);
     expect(r.evolvable.verbosity).toBe('concise');
     const active = getActivePersona(handle, DEFAULT_AGENT_ID);
-    expect(active!.version).toBe(2);
+    expect(active!.version).toBe(3);
     expect(active!.evolvable.verbosity).toBe('concise');
     const row = getProposalRow(handle, DEFAULT_AGENT_ID, p.id)!;
     expect(row.status).toBe('approved');
     expect(row.reviewedAt).toBe(reviewedAt);
-    // 锚点不变（F21）：新版本复制 v1 的 core 与 hash
-    const v1 = handle.sqlite
-      .prepare("SELECT persona_core_md, persona_core_hash FROM persona_versions WHERE version = 1")
-      .get() as { persona_core_md: string; persona_core_hash: string };
-    const v2 = handle.sqlite
+    // 锚点不变（F21）：新版本复制活跃版本（v2）的 core 与 hash
+    const prev = handle.sqlite
       .prepare("SELECT persona_core_md, persona_core_hash FROM persona_versions WHERE version = 2")
       .get() as { persona_core_md: string; persona_core_hash: string };
-    expect(v2.persona_core_md).toBe(v1.persona_core_md);
-    expect(v2.persona_core_hash).toBe(v1.persona_core_hash);
+    const next = handle.sqlite
+      .prepare("SELECT persona_core_md, persona_core_hash FROM persona_versions WHERE version = 3")
+      .get() as { persona_core_md: string; persona_core_hash: string };
+    expect(next.persona_core_md).toBe(prev.persona_core_md);
+    expect(next.persona_core_hash).toBe(prev.persona_core_hash);
   });
 
   it('enforces base_version guard when active moved on', async () => {
     const p = await proposePersona(
       handle,
       { agentId: DEFAULT_AGENT_ID, requestText: 'x', now: T0 },
-      makeComplete({ warmth: 0.4 }),
+      makeComplete({ warmth: 0.5 }),
     );
-    // 手动推进到 v3，使提案的 base_version=2 落后
+    // 手动推进到 v4，使提案的 base_version=2 落后
     const active = getActivePersonaVersionRow(handle, DEFAULT_AGENT_ID)!;
-    // 顺序约束：先停用 v2，再插入 v3（partial unique index）
-    deactivateOtherPersonaVersions(handle, DEFAULT_AGENT_ID, 3);
+    // 顺序约束：先停用 v2，再插入 v4（partial unique index）
+    deactivateOtherPersonaVersions(handle, DEFAULT_AGENT_ID, 4);
     insertPersonaVersionRow(handle, {
       id: `persona_${randomUUID()}`,
       agentId: DEFAULT_AGENT_ID,
-      version: 3,
+      version: 4,
       personaCoreMd: active.personaCoreMd,
       personaCoreHash: active.personaCoreHash,
       evolvableJson: JSON.stringify({
@@ -194,7 +194,7 @@ describe('approveProposal', () => {
       createdAt: hour(1),
       activatedAt: hour(1),
     });
-    updateAgentPersonaPointer(handle, DEFAULT_AGENT_ID, 3, hour(1));
+    updateAgentPersonaPointer(handle, DEFAULT_AGENT_ID, 4, hour(1));
     expect(() =>
       approveProposal(handle, DEFAULT_AGENT_ID, p.id, hour(2)),
     ).toThrow(/stale/);
@@ -239,17 +239,17 @@ describe('rollbackToVersion (追加式)', () => {
     );
     approveProposal(handle, DEFAULT_AGENT_ID, p.id, '2026-11-16T12:01:00.000Z');
 
-    const r = rollbackToVersion(handle, DEFAULT_AGENT_ID, 1, hour(2));
-    expect(r.version).toBe(3);
+    const r = rollbackToVersion(handle, DEFAULT_AGENT_ID, 2, hour(2));
+    expect(r.version).toBe(4);
     expect(r.evolvable.verbosity).toBe('balanced');
     const active = getActivePersona(handle, DEFAULT_AGENT_ID)!;
-    expect(active.version).toBe(3);
+    expect(active.version).toBe(4);
     expect(active.evolvable.verbosity).toBe('balanced');
 
     const audits = listProposals(handle, DEFAULT_AGENT_ID, { status: 'approved' });
     const rollbackAudit = audits.find((a) => a.source === 'rollback');
     expect(rollbackAudit).toBeDefined();
-    expect(rollbackAudit!.requestText).toContain('回滚到 v1');
+    expect(rollbackAudit!.requestText).toContain('回滚到 v2');
   });
 
   it('throws when target version is already active', async () => {
@@ -260,7 +260,7 @@ describe('rollbackToVersion (追加式)', () => {
     );
     approveProposal(handle, DEFAULT_AGENT_ID, p.id, '2026-11-16T12:01:00.000Z');
     expect(() =>
-      rollbackToVersion(handle, DEFAULT_AGENT_ID, 2, hour(2)),
+      rollbackToVersion(handle, DEFAULT_AGENT_ID, 3, hour(2)),
     ).toThrow(/已是活跃版本/);
     expect(() =>
       rollbackToVersion(handle, DEFAULT_AGENT_ID, 99, hour(2)),
@@ -280,7 +280,7 @@ describe('queries', () => {
     expect(proposals.length).toBeGreaterThan(0);
     const versions = listPersonaVersions(handle, DEFAULT_AGENT_ID);
     expect(versions.length).toBe(2);
-    expect(versions[0]!.version).toBe(2);
+    expect(versions[0]!.version).toBe(3);
   });
 });
 
@@ -290,12 +290,12 @@ describe('updatePersonaCore (锚点手动编辑)', () => {
     const newCore = '你是 Aiko。（用户手动修改版）\n\n保持温和自然。';
     const r = updatePersonaCore(handle, DEFAULT_AGENT_ID, newCore, hour(10));
     const expectHash = createHash('sha256').update(newCore, 'utf8').digest('hex');
-    // beforeEach 已重置到 v1，手动编辑产生 v2
-    expect(r.version).toBe(2);
+    // beforeEach 已重置到 v2，手动编辑产生 v3
+    expect(r.version).toBe(3);
     expect(r.personaCoreHash).toBe(expectHash);
 
     const active = getActivePersona(handle, DEFAULT_AGENT_ID)!;
-    expect(active.version).toBe(2);
+    expect(active.version).toBe(3);
     expect(active.personaCoreMd).toContain('用户手动修改版');
     // evolvable 沿用不变
     expect(active.evolvable).toEqual(before.evolvable);
