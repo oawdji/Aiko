@@ -1416,9 +1416,10 @@ agents 状态快照只变化一次
 
 ---
 
-## 22. 未来扩展接口预留
+## 22. 接口扩展章节
 
-以下接口不在 MVP 中实现，仅预留命名方向。
+§22.1 记忆接口与 §22.2 人格接口已随 Phase 2 / Phase 3 实现（含完整行为说明）；
+§22.3–§22.5 为后续阶段预留命名方向。
 
 ## 22.1 记忆接口（Phase 2 已实现）
 
@@ -1441,27 +1442,70 @@ DELETE /api/memories
 - 响应：`{ "ok": true, "clearedAt": "<ISO 8601>", "count": <清除条数> }`；空库幂等返回 `count: 0`；
 - 不影响人格锚点、对话消息与状态事件（全量清空见 §22.4 数据控制接口）。
 
-## 22.2 人格接口
+## 22.2 人格接口（Phase 3 已实现）
+
+设计细节见 [persona-evolution-design.md](./persona-evolution-design.md)。所有端点默认作用于 `DEFAULT_AGENT_ID`，可用 `agentId` 查询参数覆盖。
+
+### 端点一览
 
 ```http
 POST /api/persona/propose
-GET  /api/persona/proposals
+GET  /api/persona/proposals?agentId=&status=
 POST /api/persona/proposals/:id/approve
 POST /api/persona/proposals/:id/reject
+GET  /api/persona/versions?agentId=
 POST /api/persona/versions/:version/rollback
+GET  /api/persona/core
+PUT  /api/persona/core
 ```
 
-锚点手动编辑接口（本地所有者权限）：
+### POST /persona/propose
 
-```http
-GET /persona/core
-PUT /persona/core
-```
+请求体：`{ "requestText": string(1~2000), "agentId"?: string }`。
+
+- 流程：LLM 结构化输出 → strict 白名单校验 → 幅度校验 → 落库 `pending`（24h 有效）；
+- 响应 `201`：PersonaProposalDTO（`id / agentId / baseVersion / requestText / patch / diffSummary / status / source / expiresAt / createdAt / reviewedAt`）；
+- patch 字段白名单：`verbosity`（一次一档）/ `warmth` / `humor` / `proactiveQuestions`（单次 |Δ| ≤ 0.2）；`notes` 第一版禁改；
+- 频率限制：pending ≥ 1 或距上一提案 < 60min → `429 PERSONA_RATE_LIMITED`；
+- LLM 输出无法解析 / 超幅度 / 空补丁 → `422 PERSONA_PATCH_INVALID`（拒绝，不自动修复）。
+
+### GET /persona/proposals
+
+- 查询参数：`status`（pending/approved/rejected/expired）、`agentId`；
+- 响应：`{ proposals: PersonaProposalDTO[] }`（新→旧）。
+
+### POST /persona/proposals/:id/approve
+
+- 唯一的人格参数写路径，单事务：状态复核 → 过期检查 → **base_version 并发守卫** → 补丁复核 → 追加新版本行（锚点与 hash 原样复制）→ 指针切换 → 提案置 approved；
+- 响应 `200`：`{ ok: true, version: number, evolvable: PersonaEvolvable }`；
+- 错误：`404 PERSONA_PROPOSAL_NOT_FOUND`、`409 PERSONA_PROPOSAL_STATE`（非 pending）、`409 PERSONA_BASE_CHANGED`（base 落后，需重新生成提案）、`422 PERSONA_PATCH_INVALID`。
+
+### POST /persona/proposals/:id/reject
+
+- 仅 pending 可拒绝；响应 `200` PersonaProposalDTO（status=rejected）。
+
+### GET /persona/versions
+
+- 响应：`{ versions: Array<{ version, personaCoreHash, evolvable, isActive, createdAt, activatedAt }> }`（新→旧）。
+
+### POST /persona/versions/:version/rollback
+
+- **追加式回滚**：插入内容等于目标版本的新版本行，并写入 `source=rollback` 的已批准提案记录（审计链完整）；不修改历史行；
+- 响应 `200`：`{ ok: true, version: number, evolvable }`；目标已是活跃版本 → `409 PERSONA_PROPOSAL_STATE`；目标不存在 → `404 PERSONA_VERSION_NOT_FOUND`。
+
+### GET /api/persona/core · PUT /api/persona/core（锚点手动编辑，本地所有者权限）
 
 - `GET` 返回 `{ version, personaCoreHash, coreMd }`；
 - `PUT` 请求体 `{ coreMd }`（1~32000 字符），响应 `{ ok, version, personaCoreHash, evolvable }`；
 - 编辑以**追加式新版本**生效（沿用当前 evolvable），写入 `source=user_request` 审计记录；
-- 聊天/LLM/检索内容对锚点**无任何写路径**（F26 不变）；空正文返回 `400 PERSONA_CORE_INVALID`。
+- 聊天/LLM/检索内容对锚点**无任何写路径**（F26 不变）；空正文返回 `400 INVALID_REQUEST` / `422 PERSONA_PATCH_INVALID`（service 层空文本校验）。
+
+### 治理规则（F21–F28 摘要）
+
+1. 聊天消息、流式回复、检索内容、工具返回**没有**任何 persona 写入口；prompt 注入样本无法产生提案或修改版本；
+2. 未确认提案不影响 Prompt（活跃版本不变）；
+3. 锚点编辑产生新版本后，落后提案 approve 返回 409 需重新生成；
+4. 历史版本不可物理覆盖；回滚为追加式。
 
 ## 22.3 主动消息接口
 
