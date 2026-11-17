@@ -54,6 +54,77 @@ beforeAll(() => {
     .run();
 });
 
+describe('memories service: clear all (F18)', () => {
+  it('clears every memory for the owner and empties FTS index', async () => {
+    create();
+    create({ content: '用户在学川菜' });
+
+    const before = await memoriesRoute.request('/memories?limit=100');
+    const beforeBody = (await before.json()) as { memories: { id: string }[] };
+    expect(beforeBody.memories.length).toBeGreaterThan(0);
+
+    const res = await memoriesRoute.request('/memories', { method: 'DELETE' });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; clearedAt: string; count: number };
+    expect(body.ok).toBe(true);
+    expect(body.count).toBe(beforeBody.memories.length);
+    expect(typeof body.clearedAt).toBe('string');
+
+    const after = await memoriesRoute.request('/memories');
+    const afterBody = (await after.json()) as { memories: unknown[] };
+    expect(afterBody.memories).toEqual([]);
+
+    const fts = handle.sqlite
+      .prepare('SELECT COUNT(*) AS n FROM memories_fts')
+      .get() as { n: number };
+    expect(fts.n).toBe(0);
+  });
+
+  it('is idempotent on an empty store (count = 0)', async () => {
+    const res = await memoriesRoute.request('/memories', { method: 'DELETE' });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; clearedAt: string; count: number };
+    expect(body.ok).toBe(true);
+    expect(body.count).toBe(0);
+  });
+});
+
+describe('memories list: total, q filter, source fields', () => {
+  it('returns total, joins source message and filters by q', async () => {
+    create({ content: '用户在学川菜' });
+    create({ content: '用户喜欢跑步' });
+
+    const all = await memoriesRoute.request('/memories?limit=10');
+    const allBody = (await all.json()) as { memories: MemoryFactDTO[]; total: number };
+    expect(allBody.total).toBe(allBody.memories.length);
+    expect(allBody.total).toBeGreaterThan(1);
+    const first = allBody.memories[0];
+    expect(first?.sourceContent).toBe('我在学做饭');
+    expect(first?.sourceConversationId).toBe('conv_1');
+
+    const filtered = await memoriesRoute.request(
+      '/memories?q=' + encodeURIComponent('川菜'),
+    );
+    const filteredBody = (await filtered.json()) as {
+      memories: MemoryFactDTO[];
+      total: number;
+    };
+    expect(filteredBody.total).toBe(1);
+    expect(filteredBody.memories[0]?.content).toBe('用户在学川菜');
+  });
+
+  it('escapes LIKE wildcards in q', async () => {
+    create({ content: '100% 确定' });
+    const res = await memoriesRoute.request('/memories?q=%25');
+    const body = (await res.json()) as { memories: MemoryFactDTO[]; total: number };
+    expect(body.total).toBe(1);
+    expect(body.memories[0]?.content).toBe('100% 确定');
+
+    // 清理：恢复空库状态，避免 (source_message_id, content) 唯一约束影响后续用例
+    await memoriesRoute.request('/memories', { method: 'DELETE' });
+  });
+});
+
 function create(overrides: Record<string, unknown> = {}) {
   return createMemory(handle, {
     owner: OWNER,

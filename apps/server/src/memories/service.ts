@@ -9,6 +9,7 @@ import {
 import type { DbHandle } from '../db/client';
 import type { MemoryOwner } from './repository';
 import {
+  countMemories,
   findMemoryById,
   insertMemory,
   listActiveByType,
@@ -183,6 +184,41 @@ export function getMemories(
   handle: DbHandle,
   owner: MemoryOwner,
   query: MemoryListQuery,
-): MemoryFactDTO[] {
-  return listMemories(handle, owner, query);
+): { memories: MemoryFactDTO[]; total: number } {
+  return {
+    memories: listMemories(handle, owner, query),
+    total: countMemories(handle, owner, query),
+  };
+}
+
+/**
+ * 清空全部记忆（F18 数据控制）：owner 范围内硬删除 + FTS 索引同步，单事务。
+ * 与单条软删除不同：批量清空是不可恢复操作，语义与 data-control 的全量清空一致。
+ * 空库幂等，返回 count = 0。
+ */
+export function clearAllMemories(
+  handle: DbHandle,
+  owner: MemoryOwner,
+): { clearedAt: string; count: number } {
+  const clearedAt = new Date().toISOString();
+  const count = (
+    handle.sqlite
+      .prepare(
+        'SELECT COUNT(*) AS n FROM memories WHERE user_id = ? AND agent_id = ?',
+      )
+      .get(owner.userId, owner.agentId) as { n: number }
+  ).n;
+
+  handle.sqlite.transaction(() => {
+    handle.sqlite
+      .prepare('DELETE FROM memories WHERE user_id = ? AND agent_id = ?')
+      .run(owner.userId, owner.agentId);
+    try {
+      handle.sqlite.prepare('DELETE FROM memories_fts').run();
+    } catch {
+      // memories_fts 未创建时跳过（与 data-control.deleteAllData 同策略）
+    }
+  })();
+
+  return { clearedAt, count };
 }
