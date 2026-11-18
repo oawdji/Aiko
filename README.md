@@ -59,15 +59,11 @@ Aiko 是一个运行在本地的拟人化聊天 Agent。她不是“带聊天框
 
 | 文档 | 说明 |
 |---|---|
-| [docs/requirements.md](docs/requirements.md) | 需求文档：产品定位、功能需求、分阶段实施计划 |
-| [docs/technical-design.md](docs/technical-design.md) | 技术设计：架构、状态引擎、情感标签映射、里程碑 |
 | [docs/api-contract.md](docs/api-contract.md) | API 契约：接口定义、错误码、流式协议、幂等策略、实测记录 |
 | [docs/database-schema.md](docs/database-schema.md) | 数据库设计：SQLite 表结构、约束、迁移与事务 |
-| [docs/react-architecture.md](docs/react-architecture.md) | React 架构：组件设计、状态边界、渲染隔离 |
 | [docs/persona-core.md](docs/persona-core.md) | 人格锚点初始种子（人格可在人格面板自定义编辑，版本化存于数据库） |
-| [docs/semantic-retrieval-plan.md](docs/semantic-retrieval-plan.md) | 语义检索模块任务拆分与边界（T1–T8） |
-| [docs/memory-emotion-design.md](docs/memory-emotion-design.md) | 长期记忆与情感记忆设计：数据模型、检索评分、生命周期、实施步骤 |
 
+> 历史设计文档（需求、技术设计、React 架构、记忆/情绪设计、语义检索任务拆分等）已归档至 [docs/archive/](docs/archive/)，仅供查阅，不再随功能更新维护。
 ## 项目结构
 
 ```text
@@ -142,7 +138,7 @@ pnpm gen:persona   # 从 docs/persona-core.md 重新生成新库初始锚点（�
 | `apps/server/src/chat/memory-client.ts` | TS 子进程客户端,首次失败进程内禁用 |
 | `apps/server/src/config/memory.ts` | 环境变量配置(全默认值) |
 
-契约类型定义在 `packages/shared/src/types/retrieval.ts`,任务拆分见 `docs/semantic-retrieval-plan.md`。
+契约类型定义在 `packages/shared/src/types/retrieval.ts`,任务拆分见 `docs/archive/semantic-retrieval-plan.md`。
 
 **开发机首次运行**(本模块需要 Python 3.10+):
 

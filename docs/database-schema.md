@@ -1,7 +1,7 @@
 # SQLite 数据库结构设计
 
 项目：本地单用户拟人化聊天 Agent  
-关联文档：[requirements.md](./requirements.md)、[technical-design.md](./technical-design.md)  
+关联文档：[api-contract.md](./api-contract.md)；历史设计文档见 [archive/](./archive/)（requirements.md、technical-design.md 等）  
 数据库：SQLite  
 ORM：Drizzle ORM  
 版本：v1.2  
@@ -1439,7 +1439,7 @@ tag = neutral
 
 ## 14.1 未来 `memories` 表要点
 
-> 完整字段设计（含 memory_pad / arousal / half_life 等情感字段）见 [memory-emotion-design.md](./memory-emotion-design.md) §3。
+> 完整字段设计（含 memory_pad / arousal / half_life 等情感字段）见 [archive/memory-emotion-design.md](./archive/memory-emotion-design.md) §3。
 
 Phase 2 设计时至少需要：
 
