@@ -1044,7 +1044,7 @@ VALUES (
 );
 ```
 
-`:persona_core_md` 与 `:initial_evolvable_json` 的唯一来源是 [persona-core-v1.md](./persona-core-v1.md)，seed 脚本必须从该文件标记区读取内容，不得在代码中维护第二份副本。
+`:persona_core_md` 与 `:initial_evolvable_json` 的唯一来源是 [persona-core.md](./persona-core.md)，seed 脚本必须从该文件标记区读取内容，不得在代码中维护第二份副本。
 
 `persona_core_hash` 计算：
 
@@ -1412,8 +1412,8 @@ persona_versions → personaVersions
 必须验证：
 
 - 首次初始化创建默认 Agent；
-- 只创建 persona version 1；
-- `persona_core_md` 与 [persona-core-v1.md](./persona-core-v1.md) 标记区内容一致；
+- 只创建初始 persona 版本（当前 seed 写入版本号 2）；
+- `persona_core_md` 与 [persona-core.md](./persona-core.md) 标记区内容一致；
 - 默认设置存在；
 - 重复执行初始化不会插入重复数据；
 - 默认 Agent 状态为：

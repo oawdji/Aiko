@@ -30,9 +30,9 @@ const DEFAULT_SETTINGS: Array<[key: string, valueJson: string]> = [
 /**
  * 默认数据初始化（幂等，单事务）：
  * - 默认 Agent（valence 0 / arousal 0 / neutral）；
- * - persona version 1（锚点来自 docs/persona-core-v1.md 生成的模块）；
+ * - 初始 persona 版本（版本号 2，锚点来自 docs/persona-core.md 生成的模块）；
  * - 四条本地设置（只补缺失键，不覆盖用户已修改的值）。
- * 对应 database-schema.md §6 初始数据与 §13.2 初始化测试。
+ * 对应 database-schema.md §6 初始数据。
  */
 export function seedDefaultData(handle: DbHandle, now: string): void {
   const { db } = handle;

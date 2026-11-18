@@ -5,11 +5,11 @@ import { extractPersonaSeedSource } from '../persona-source';
 const SAMPLE = `
 # 标题（标记区外内容，应被忽略）
 
-<!-- PERSONA_CORE_V1_BEGIN -->
+<!-- PERSONA_CORE_BEGIN -->
 
 你是 Aiko，一个运行在用户本机的拟人化聊天角色。
 
-<!-- PERSONA_CORE_V1_END -->
+<!-- PERSONA_CORE_END -->
 
 ## 3. 初始 evolvable_json
 
@@ -53,7 +53,7 @@ describe('extractPersonaSeedSource', () => {
   it('throws when the evolvable json block is missing', () => {
     expect(() =>
       extractPersonaSeedSource(
-        '<!-- PERSONA_CORE_V1_BEGIN -->内容<!-- PERSONA_CORE_V1_END -->',
+        '<!-- PERSONA_CORE_BEGIN -->内容<!-- PERSONA_CORE_END -->',
       ),
     ).toThrow(/evolvable_json/);
   });

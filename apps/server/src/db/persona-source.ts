@@ -6,10 +6,8 @@ export type PersonaSeedSource = {
   evolvableJson: string;
 };
 
-export const PERSONA_CORE_V1_BEGIN = '<!-- PERSONA_CORE_V1_BEGIN -->';
-export const PERSONA_CORE_V1_END = '<!-- PERSONA_CORE_V1_END -->';
-export const PERSONA_CORE_V2_BEGIN = '<!-- PERSONA_CORE_V2_BEGIN -->';
-export const PERSONA_CORE_V2_END = '<!-- PERSONA_CORE_V2_END -->';
+export const PERSONA_CORE_BEGIN = '<!-- PERSONA_CORE_BEGIN -->';
+export const PERSONA_CORE_END = '<!-- PERSONA_CORE_END -->';
 
 export type PersonaSourceMarkers = {
   begin: string;
@@ -18,20 +16,20 @@ export type PersonaSourceMarkers = {
   name: string;
 };
 
-const V1_MARKERS: PersonaSourceMarkers = {
-  begin: PERSONA_CORE_V1_BEGIN,
-  end: PERSONA_CORE_V1_END,
-  name: 'persona-core-v1.md',
+const DEFAULT_MARKERS: PersonaSourceMarkers = {
+  begin: PERSONA_CORE_BEGIN,
+  end: PERSONA_CORE_END,
+  name: 'persona-core.md',
 };
 
 /**
- * 从锚点文档提取 seed 数据（当前事实来源：docs/persona-core-v2.md）。
+ * 从锚点文档提取 seed 数据（唯一事实来源：docs/persona-core.md）。
  * 该文件是人格锚点的唯一事实来源（database-schema.md §6.2），
  * 生成器与 seed 逻辑都必须经过本函数，禁止在代码中维护第二份锚点文本。
  */
 export function extractPersonaSeedSource(
   source: string,
-  markers: PersonaSourceMarkers = V1_MARKERS,
+  markers: PersonaSourceMarkers = DEFAULT_MARKERS,
 ): PersonaSeedSource {
   const begin = source.indexOf(markers.begin);
   const end = source.indexOf(markers.end);

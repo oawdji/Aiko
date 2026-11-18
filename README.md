@@ -52,7 +52,7 @@ Aiko 是一个运行在本地的拟人化聊天 Agent。她不是“带聊天框
 聊天协议：Vercel AI SDK v7（UIMessage Stream，已锁定 ai@7.0.166 / @ai-sdk/react@4.0.170）
 状态管理：自研轻量 store（createStore + useSyncExternalStore，无外部状态库）
 工程：pnpm workspace monorepo
-测试：Vitest 5.1（workspace 统一版本，当前 163 个用例全绿）
+测试：Vitest（workspace 统一版本，当前 340 个用例全绿）
 ```
 
 ## 文档导航
@@ -64,8 +64,7 @@ Aiko 是一个运行在本地的拟人化聊天 Agent。她不是“带聊天框
 | [docs/api-contract.md](docs/api-contract.md) | API 契约：接口定义、错误码、流式协议、幂等策略、实测记录 |
 | [docs/database-schema.md](docs/database-schema.md) | 数据库设计：SQLite 表结构、约束、迁移与事务 |
 | [docs/react-architecture.md](docs/react-architecture.md) | React 架构：组件设计、状态边界、渲染隔离 |
-| [docs/persona-core-v2.md](docs/persona-core-v2.md) | 人格锚点 v2（当前）：十六岁文学少女形象，真人化语气 |
-| [docs/persona-core-v1.md](docs/persona-core-v1.md) | 人格锚点 v1（历史）：初始中性助理形象 |
+| [docs/persona-core.md](docs/persona-core.md) | 人格锚点初始种子（人格可在人格面板自定义编辑，版本化存于数据库） |
 | [docs/semantic-retrieval-plan.md](docs/semantic-retrieval-plan.md) | 语义检索模块任务拆分与边界（T1–T8） |
 | [docs/memory-emotion-design.md](docs/memory-emotion-design.md) | 长期记忆与情感记忆设计：数据模型、检索评分、生命周期、实施步骤 |
 
@@ -95,7 +94,7 @@ Aiko 是一个运行在本地的拟人化聊天 Agent。她不是“带聊天框
 │        ├─ data-control/      # 数据导出与删除
 │        ├─ settings/          # LLM 设置服务与路由（DB 优先，热生效）
 │        ├─ llm/               # OpenAI 兼容 Provider（按配置键缓存）
-│        ├─ db/                # 连接层 / 六表 schema / 迁移 / 幂等 seed
+│        ├─ db/                # 连接层 / 全部表 schema / 迁移 / 幂等 seed
 │        └─ config/            # 服务 / LLM / 数据目录环境变量校验
 ├─ packages/
 │  └─ shared/                  # Zod schema（单一事实来源）与共享类型
@@ -120,9 +119,9 @@ pnpm dev
 pnpm dev:server
 pnpm dev:web
 
-pnpm test          # 全部测试（230 个）
+pnpm test          # 全部测试（340 个）
 pnpm lint          # ESLint
-pnpm gen:persona   # 从 docs/persona-core-v1.md 重新生成锚点模块
+pnpm gen:persona   # 从 docs/persona-core.md 重新生成新库初始锚点（已有数据库请在面板中编辑）
 ```
 
 启动后打开 http://127.0.0.1:5173，**点右上角 ⚙ 设置**填入 API Key（默认已指向 DeepSeek：`https://api.deepseek.com` + `deepseek-chat`），点「测试连接」确认后即可对话。**不需要改任何配置文件。**
