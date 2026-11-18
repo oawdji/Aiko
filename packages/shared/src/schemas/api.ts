@@ -200,6 +200,7 @@ export const UpdateSettingsRequestBodySchema = z
 
 export const ApiErrorCodeSchema = z.enum([
   'INVALID_REQUEST',
+  'REGENERATE_NOT_APPLICABLE',
   'AGENT_NOT_FOUND',
   'CONVERSATION_NOT_FOUND',
   'MEM_NOT_FOUND',
@@ -326,6 +327,17 @@ export const LlmConnectionTestResponseSchema = z.object({
   errorCode: z.string().min(1).nullable(),
 });
 
+/** POST /api/conversations 请求体（手动新建会话） */
+export const ConversationCreateRequestSchema = z.object({
+  agentId: z.string().min(1),
+});
+export type ConversationCreateRequest = z.infer<typeof ConversationCreateRequestSchema>;
+
+/** POST /api/conversations 响应 */
+export const ConversationCreateResponseSchema = z.object({
+  conversation: ConversationDTOSchema,
+});
+
 /** DELETE /api/conversations[/:id] 响应（会话删除/清空） */
 export const ConversationDeleteResponseSchema = z.object({
   ok: z.literal(true),
@@ -342,6 +354,7 @@ export type ConversationDTO = z.infer<typeof ConversationDTOSchema>;
 export type ConversationListItem = z.infer<typeof ConversationListItemSchema>;
 export type ConversationListResponse = z.infer<typeof ConversationListResponseSchema>;
 export type ConversationDeleteResponse = z.infer<typeof ConversationDeleteResponseSchema>;
+export type ConversationCreateResponse = z.infer<typeof ConversationCreateResponseSchema>;
 export type AgentDTO = z.infer<typeof AgentDTOSchema>;
 export type AgentStateEvent = z.infer<typeof AgentStateEventSchema>;
 export type AppSettings = z.infer<typeof AppSettingsSchema>;

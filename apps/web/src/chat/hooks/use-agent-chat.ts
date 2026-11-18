@@ -32,10 +32,18 @@ export function useAgentChat({
   const transportRef = useRef(
     new DefaultChatTransport<AppUIMessage>({
       api: '/api/chat',
-      prepareSendMessagesRequest: ({ messages }) => ({
-        api: '/api/chat',
-        body: buildChatRequestBody({ conversationId, agentId, messages }),
-      }),
+      prepareSendMessagesRequest: ({ messages, trigger }) =>
+        trigger === 'regenerate-message'
+          ? {
+              // 重新生成走专用端点：服务端基于库里最后一条 user 消息重答，
+              // body 里的消息列表不参与后端逻辑
+              api: `/api/conversations/${conversationId}/regenerate`,
+              body: {},
+            }
+          : {
+              api: '/api/chat',
+              body: buildChatRequestBody({ conversationId, agentId, messages }),
+            },
     }),
   );
 

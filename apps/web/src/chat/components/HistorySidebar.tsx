@@ -8,6 +8,7 @@ type Props = {
   error: string | null;
   disabled: boolean;
   onSelect: (id: string) => void;
+  onNew: () => void;
   onDelete: (id: string) => void;
   onClearAll: () => void;
   onRetry: () => void;
@@ -43,6 +44,7 @@ export function HistorySidebar({
   error,
   disabled,
   onSelect,
+  onNew,
   onDelete,
   onClearAll,
   onRetry,
@@ -65,6 +67,15 @@ export function HistorySidebar({
       <div className="flex items-center justify-between px-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2">
         <h2 className="text-xs font-semibold tracking-wide text-neutral-400">历史记录</h2>
         <div className="flex items-center gap-1">
+          <button
+            type="button"
+            aria-label="新建会话"
+            disabled={disabled}
+            onClick={onNew}
+            className="rounded-md border border-neutral-700 px-2 py-1 text-[11px] text-neutral-300 hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            ＋ 新会话
+          </button>
           {items.length > 0 && (
             <button
               type="button"

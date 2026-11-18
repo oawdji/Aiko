@@ -15,6 +15,7 @@ import { DevChecklist } from './DevChecklist';
 import { SettingsDialog } from '../settings/components/SettingsDialog';
 import {
   clearConversations,
+  createConversation,
   deleteConversation,
   fetchConversation,
   fetchConversationList,
@@ -52,7 +53,7 @@ function ChatTranscript({
   onStatus: (status: ChatStatus) => void;
   onUpdated: () => void;
 }) {
-  const { messages, sendMessage, status, stop, error } = useAgentChat({
+  const { messages, sendMessage, status, stop, error, regenerate } = useAgentChat({
     restoredMessages,
     conversationId,
     agentId,
@@ -84,7 +85,11 @@ function ChatTranscript({
 
   return (
     <>
-      <MessageList messages={messages} />
+      <MessageList
+        messages={messages}
+        disabled={isBusy}
+        onRegenerate={isBusy ? undefined : () => regenerate()}
+      />
 
       {status === 'error' && (
         <div className="px-4 pb-2">
@@ -213,6 +218,27 @@ export function ChatView({ bootstrap }: { bootstrap: BootstrapResponse }) {
       });
   };
 
+  /** 手动新建空白会话：立即切换，并把它插入历史列表最前。 */
+  const handleCreateConversation = () => {
+    if (isBusy || opening) return;
+    setOpening(true);
+    setOpenError(null);
+    void createConversation(bootstrap.agent.id)
+      .then((res) => {
+        setSession({ id: res.conversation.id, messages: [] });
+        setChatStatus('ready');
+        setHistoryItems((items) => [
+          { ...res.conversation, preview: null },
+          ...items.filter((item) => item.id !== res.conversation.id),
+        ]);
+        setHistoryOpen(false);
+      })
+      .catch((error: unknown) => {
+        setOpenError(error instanceof Error ? error.message : '新建会话失败');
+      })
+      .finally(() => setOpening(false));
+  };
+
   const [llmSettings, setLlmSettings] = useState<SettingsResponse | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -286,6 +312,7 @@ export function ChatView({ bootstrap }: { bootstrap: BootstrapResponse }) {
           error={historyError}
           disabled={isBusy || opening}
           onSelect={selectConversation}
+          onNew={handleCreateConversation}
           onDelete={handleDeleteConversation}
           onClearAll={handleClearConversations}
           onRetry={refreshHistory}

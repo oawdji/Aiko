@@ -1,10 +1,12 @@
 import {
   BootstrapResponseSchema,
+  ConversationCreateResponseSchema,
   ConversationDeleteResponseSchema,
   ConversationDetailResponseSchema,
   ConversationListResponseSchema,
   HealthResponseSchema,
   type BootstrapResponse,
+  type ConversationCreateResponse,
   type ConversationDeleteResponse,
   type ConversationDetailResponse,
   type ConversationListResponse,
@@ -41,6 +43,17 @@ export function fetchConversationList(
   return requestJson(`/conversations${query}`, ConversationListResponseSchema, options);
 }
 
+/** 手动新建空白会话（POST /api/conversations）。 */
+export function createConversation(
+  agentId: string,
+  options: RequestOptions = {},
+): Promise<ConversationCreateResponse> {
+  return requestJson('/conversations', ConversationCreateResponseSchema, {
+    ...options,
+    method: 'POST',
+    body: { agentId },
+  });
+}
 export function deleteConversation(
   conversationId: string,
   options: RequestOptions = {},

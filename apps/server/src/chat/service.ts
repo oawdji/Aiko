@@ -387,14 +387,19 @@ export async function runChatPipeline(
   extractComplete?: CompleteFn,
   emotionExtractor?: EmotionExtractor,
   memory?: MemoryClient | null,
+  /** 重新生成场景：复用已入库的 user 消息（跳过持久化/情绪抽取/事实抽取/摘要触发）。 */
+  existing?: { userMessageId: string; agentId: string },
 ): Promise<ChatPipelineResult> {
-  const persisted = persistUserMessage(handle, body, now);
+  const persisted = existing
+    ? { messageId: existing.userMessageId, conversationId: body.conversationId, agentId: existing.agentId }
+    : persistUserMessage(handle, body, now);
   const memoryClient = memory === undefined ? createPythonMemoryClient() : memory;
   const recent = loadRecentWindow(handle, persisted.conversationId, 30);
 
   // 方案 1：聊天前独立抽取情绪 → 落库状态事件（失败降级不产生事件）
+  // 重新生成复用已有 user 消息：情绪已随原消息抽取过，不再重复
   let stateEvent: ChatStateEventData | null = null;
-  if (isEmotionEngineEnabled()) {
+  if (isEmotionEngineEnabled() && !existing) {
     try {
       const extractor = emotionExtractor ?? ((msg, ctx) => extractEmotionViaLlm(handle, msg, ctx));
       const raw = await extractor(body.message, recent);
@@ -417,7 +422,9 @@ export async function runChatPipeline(
   // 受控人格演化 P3：风格调整意图的消息不进事实抽取，
   // 避免"既生成提案参数、又沉淀偏好记忆"的双轨生效（F25/F26 边界）
   const isStyleAdjustment = looksLikeStyleAdjustment(body.message);
-  const memoryExtraction = isStyleAdjustment
+  const memoryExtraction = existing
+    ? Promise.resolve(0) // 重新生成不重复抽取事实
+    : isStyleAdjustment
     ? Promise.resolve(0)
     : scheduleFactExtraction(
     handle,
@@ -508,6 +515,7 @@ export async function runChatPipeline(
 
   // 再巩固入口：命中即刷新 last_accessed_at（S4 formalize；随抽取 promise 一起被测试等待）
   const memoryAccess = Promise.resolve().then(() => {
+    if (existing) return undefined; // 重新生成不改变记忆命中统计与摘要触发
     updateLastAccessed(handle, memoryHits.map((m) => m.id), now);
     reconsolidateHits(handle, memoryHits.map((m) => m.id), now);
     const summary = maybeTriggerSummary(handle, persisted.conversationId, persisted.agentId, now);
@@ -657,6 +665,120 @@ async function* iterateLlmChunks(
 }
 
 /** 聊天编排入口：route 只负责校验与错误映射。 */
+export class RegenerateNotApplicableError extends Error {
+  constructor(reason: string) {
+    super(reason);
+    this.name = 'RegenerateNotApplicableError';
+  }
+}
+
+/**
+ * 重新生成最后一条 assistant 回复（含失败占位重试）：
+ * - 最后一条消息必须是 assistant（streaming 中不可操作；主动消息不可重新生成）；
+ * - 不物理删除（conversation_summaries 对消息有 RESTRICT 外键），
+ *   而是标记为 failed / SUPERSEDED，前端按该 errorCode 过滤展示；
+ * - 复用最后一条 user 消息走完整 prompt 组装（existing 路径：
+ *   不重复持久化、不重复情绪抽取、不重复事实抽取、不触发摘要）；
+ * - LLM 失败时写入新的 failed 占位（与普通聊天行为一致）。
+ */
+export async function runRegeneratePipeline(
+  handle: DbHandle,
+  params: { conversationId: string; agentId?: string },
+  now: string,
+  llmFactory?: LlmStreamFactory,
+  memory?: MemoryClient | null,
+): Promise<ChatPipelineResult> {
+  const conversation = handle.db
+    .select()
+    .from(conversations)
+    .where(eq(conversations.id, params.conversationId))
+    .get();
+  if (!conversation) {
+    throw new ChatConversationNotFoundError(params.conversationId);
+  }
+
+  const last = handle.db
+    .select()
+    .from(messages)
+    .where(eq(messages.conversationId, conversation.id))
+    .orderBy(desc(messages.createdAt), desc(messages.id))
+    .get();
+  if (!last || last.role !== 'assistant' || last.status === 'streaming') {
+    throw new RegenerateNotApplicableError(
+      '只有最后一条 assistant 回复可以重新生成',
+    );
+  }
+  let metadata: { proactive?: boolean } | null = null;
+  if (last.metadataJson) {
+    try {
+      metadata = JSON.parse(last.metadataJson) as { proactive?: boolean };
+    } catch {
+      metadata = null;
+    }
+  }
+  if (metadata?.proactive === true) {
+    throw new RegenerateNotApplicableError('主动消息不能重新生成');
+  }
+
+  const lastUser = handle.db
+    .select()
+    .from(messages)
+    .where(and(eq(messages.conversationId, conversation.id), eq(messages.role, 'user')))
+    .orderBy(desc(messages.createdAt), desc(messages.id))
+    .get();
+  if (!lastUser || !lastUser.content.trim()) {
+    throw new RegenerateNotApplicableError('没有可基于的用户消息');
+  }
+
+  handle.sqlite.transaction(() => {
+    handle.db
+      .update(messages)
+      .set({
+        status: 'failed',
+        errorCode: 'SUPERSEDED',
+        content: '（已重新生成）',
+        updatedAt: now,
+      })
+      .where(eq(messages.id, last.id))
+      .run();
+  })();
+
+  return runChatPipeline(
+    handle,
+    {
+      agentId: conversation.agentId,
+      conversationId: conversation.id,
+      message: lastUser.content,
+      clientMessageId: lastUser.clientMessageId ?? `regen_${lastUser.id}`,
+    },
+    now,
+    llmFactory,
+    undefined,
+    undefined,
+    memory,
+    { userMessageId: lastUser.id, agentId: conversation.agentId },
+  );
+}
+
+/** POST /api/conversations/:id/regenerate 请求入口：编排 → UIMessage 流。 */
+export async function handleRegenerateRequest(
+  deps: {
+    conversationId: string;
+    llmFactory?: LlmStreamFactory;
+    memoryClient?: MemoryClient | null;
+  },
+  handle: DbHandle,
+  now: string,
+): Promise<Response> {
+  const pipeline = await runRegeneratePipeline(
+    handle,
+    { conversationId: deps.conversationId },
+    now,
+    deps.llmFactory,
+    deps.memoryClient,
+  );
+  return createChatResponse(handle, pipeline, now);
+}
 export async function handleChatRequest(
   deps: {
     body: ChatRequestBody;

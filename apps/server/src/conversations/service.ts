@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import {
   MESSAGE_PAGE_LIMIT_DEFAULT,
@@ -7,6 +8,7 @@ import {
   type ConversationDetailResponse,
   type ConversationListResponse,
 } from '@aiko/shared';
+import { LOCAL_USER_ID, type ConversationDTO } from '@aiko/shared';
 import type { DbHandle } from '../db/client';
 import {
   mapAgentRow,
@@ -75,6 +77,54 @@ export function listConversations(handle: DbHandle, agentId?: string): Conversat
   return ConversationListResponseSchema.parse({ items });
 }
 
+export class ConversationAgentNotFoundError extends Error {
+  constructor(agentId: string) {
+    super(`Agent not found: ${agentId}`);
+    this.name = 'ConversationAgentNotFoundError';
+  }
+}
+
+/**
+ * 手动新建会话：创建一个空白会话并立即返回 DTO。
+ * 新会话按 lastMessageAt/updatedAt 排序位于历史列表最前（见 listConversations 排序口径）。
+ */
+export function createConversation(
+  handle: DbHandle,
+  agentId: string,
+  now: string,
+): ConversationDTO {
+  const agent = handle.db
+    .select({ id: agents.id })
+    .from(agents)
+    .where(eq(agents.id, agentId))
+    .get();
+  if (!agent) {
+    throw new ConversationAgentNotFoundError(agentId);
+  }
+  const id = `conv_${randomUUID()}`;
+  handle.db
+    .insert(conversations)
+    .values({
+      id,
+      userId: LOCAL_USER_ID,
+      agentId,
+      title: null,
+      lastMessageAt: null,
+      isArchived: 0,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .run();
+  const row = handle.db
+    .select()
+    .from(conversations)
+    .where(eq(conversations.id, id))
+    .get();
+  if (!row) {
+    throw new Error('createConversation: conversation disappeared after insert');
+  }
+  return mapConversationRow(row);
+}
 export class CursorMessageNotFoundError extends Error {
   constructor(conversationId: string, beforeId: string) {
     super(`Cursor message ${beforeId} not found in conversation ${conversationId}`);
