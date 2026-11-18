@@ -32,6 +32,11 @@ import {
 import { extractEmotionViaLlm } from './emotion-extract';
 import { computeDisplayState, resolveDecayConfig, revertToBaseline } from './emotion-decay';
 import { buildEmotionPromptLine } from './emotion-prompt';
+import {
+  buildSummaryPromptLine,
+  getRecentWindowOldestCreatedAt,
+  loadInjectableSummaries,
+} from './summary-context';
 import { loadMemoryConfig } from '../config/memory';
 import { createPythonMemoryClient, type MemoryClient } from './memory-client';
 import { scheduleFactExtraction } from '../extraction/pipeline';
@@ -468,7 +473,25 @@ export async function runChatPipeline(
       // 降级约定:检索失败不阻断对话
     }
   }
-  // P1: 注入用户确认的表达风格配置（persona_versions active 版本；读取失败降级为仅锚点）
+  // 分层记忆补全：注入已完全滑出近期窗口的会话摘要（"只写不读"修复）。
+  // 只取 ready 且 end 消息早于窗口最旧消息的摘要，避免与窗口内容重复；
+  // 读取失败降级为不注入，不阻断聊天。
+  let summaryLine: string | null = null;
+  try {
+    const windowOldestCreatedAt = getRecentWindowOldestCreatedAt(
+      handle,
+      persisted.conversationId,
+      30,
+    );
+    const summaries = loadInjectableSummaries(
+      handle,
+      persisted.conversationId,
+      windowOldestCreatedAt,
+    );
+    summaryLine = buildSummaryPromptLine(summaries);
+  } catch {
+    // 降级约定：摘要读取失败不影响对话
+  }  // P1: 注入用户确认的表达风格配置（persona_versions active 版本；读取失败降级为仅锚点）
   const activePersona = getActivePersona(handle, persisted.agentId);
   const systemParts = [PERSONA_CORE_MD];
   if (activePersona) {
@@ -477,6 +500,7 @@ export async function runChatPipeline(
   if (emotionLine) systemParts.push(emotionLine);
   if (memoryLine) systemParts.push(memoryLine);
   if (memoryBlock) systemParts.push(memoryBlock);
+  if (summaryLine) systemParts.push(summaryLine);
   const prompt = {
     system: systemParts.filter((part) => part.length > 0).join('\n\n'),
     messages: recent,
