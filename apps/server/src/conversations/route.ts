@@ -14,7 +14,7 @@ import {
   getConversationDetail,
   listConversations,
 } from './service';
-import { createPythonMemoryClient } from '../chat/memory-client';
+import { getSharedMemoryClient } from '../chat/memory-client';
 import {
   ChatConversationNotFoundError,
   LlmRequestFailedError,
@@ -74,7 +74,7 @@ export const conversationsRoute = new Hono().post('/conversations', async (c) =>
 }).delete('/conversations', (c) => {
   const result = clearConversations(getDb());
   // 语义向量库存有对话原文切片，一并清空（向量库不可用则降级，不影响主流程）
-  void createPythonMemoryClient().clearVectors();
+  void getSharedMemoryClient().clearVectors();
   return c.json({ ok: true, deletedAt: result.deletedAt, count: result.count });
 }).delete('/conversations/:id', (c) => {
   const id = c.req.param('id');

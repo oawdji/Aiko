@@ -26,7 +26,7 @@ export const noopMemoryClient: MemoryClient = {
   async clearVectors() {},
 };
 
-type CliResult = { ok: true; hits?: string[] } | { ok: false; error: string };
+export type CliResult = { ok: true; hits?: string[] } | { ok: false; error: string };
 
 function runCli(cliPath: string, pythonExe: string, request: unknown, timeoutMs: number): Promise<CliResult> {
   return new Promise((resolve, reject) => {
@@ -58,19 +58,31 @@ function runCli(cliPath: string, pythonExe: string, request: unknown, timeoutMs:
   });
 }
 
-export function createPythonMemoryClient(options?: { pythonExe?: string; cliPath?: string }): MemoryClient {
+export function createPythonMemoryClient(options?: {
+  pythonExe?: string;
+  cliPath?: string;
+  /** 测试注入:替身 runCli 实现 */
+  runCliImpl?: typeof runCli;
+  /** 每次真实调用后的状态回调(透明降级:状态经 settings API 暴露) */
+  onResult?: (ok: boolean, error?: string) => void;
+}): MemoryClient {
   const pythonExe = options?.pythonExe ?? process.env.PYTHON_EXECUTABLE ?? 'python';
   const cliPath =
     options?.cliPath ?? new URL('../../../../services/retrieval/cli.py', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
+  const run = options?.runCliImpl ?? runCli;
   let disabled = false;
 
   const call = async (request: unknown): Promise<CliResult | null> => {
     if (disabled) return null;
     try {
-      return await runCli(cliPath, pythonExe, request, 30_000);
+      const result = await run(cliPath, pythonExe, request, 30_000);
+      options?.onResult?.(true);
+      return result;
     } catch (error) {
       disabled = true; // 进程内禁用:环境不可用时不再每轮重试
-      console.warn('[memory] retrieval disabled after failure:', error instanceof Error ? error.message : error);
+      const reason = error instanceof Error ? error.message : String(error);
+      console.warn('[memory] retrieval disabled after failure:', reason);
+      options?.onResult?.(false, reason);
       return null;
     }
   };
@@ -88,4 +100,37 @@ export function createPythonMemoryClient(options?: { pythonExe?: string; cliPath
       await call({ op: 'clear' });
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// 共享单例 + 检索状态（透明降级）：
+// 此前每个聊天请求都新建 client 实例，"首次失败进程内禁用"并未跨请求生效，
+// 且降级只写日志、用户不可见。现在共享一个实例并记录最近一次真实调用的结果，
+// 经 GET /api/settings 的 memory 字段暴露给前端。
+// ---------------------------------------------------------------------------
+
+export type MemoryRetrievalState = 'unverified' | 'ok' | 'degraded';
+
+let sharedClient: MemoryClient | null = null;
+let retrievalStatus: { state: MemoryRetrievalState; reason: string | null } = {
+  state: 'unverified',
+  reason: null,
+};
+
+export function getMemoryRetrievalStatus(): { state: MemoryRetrievalState; reason: string | null } {
+  return { ...retrievalStatus };
+}
+
+/** 进程级共享 client：跨请求保留"已禁用"状态与检索状态。 */
+export function getSharedMemoryClient(): MemoryClient {
+  if (!sharedClient) {
+    sharedClient = createPythonMemoryClient({
+      onResult: (ok, error) => {
+        retrievalStatus = ok
+          ? { state: 'ok', reason: null }
+          : { state: 'degraded', reason: error ?? '未知错误' };
+      },
+    });
+  }
+  return sharedClient;
 }

@@ -7,6 +7,7 @@ import type {
 import { ApiClientError } from '../../shared/api/errors';
 import { fetchProactiveHistory } from '../../proactive/api/proactive-api';
 import {
+  fetchSettings,
   testLlmConnection,
   updateSettings,
 } from '../../shared/api/settings-api';
@@ -51,6 +52,15 @@ export function SettingsDialog({ open, settings, onSaved, onClose }: Props) {
   const [proactiveHistory, setProactiveHistory] = useState<
     Array<{ id: string; strategy: string; evidenceText: string; createdAt: string; content: string }>
   >([]);
+
+  // 打开弹窗时拉取最新设置：语义检索可能刚在对话中降级/恢复，props 里的快照是旧的
+  useEffect(() => {
+    if (!open) return;
+    fetchSettings()
+      .then(onSaved)
+      .catch(() => undefined);
+    // （依赖仅 open：设置刷新由 onSaved 回写 props）
+  }, [open]);
 
   useEffect(() => {
     if (open && settings) {
@@ -143,6 +153,33 @@ export function SettingsDialog({ open, settings, onSaved, onClose }: Props) {
           兼容 OpenAI 格式的端点（DeepSeek、第三方中转、本地 vLLM/Ollama）。
           API Key 只写不读，保存后立即生效。
         </p>
+
+        {settings?.memory && (
+          <section aria-label="记忆检索" className="space-y-1 rounded-lg border border-neutral-800 p-3">
+            <h3 className="text-sm font-semibold text-neutral-300">记忆检索</h3>
+            {settings.memory.state === 'ok' && (
+              <p className="text-xs text-emerald-400">
+                语义向量检索可用（bge-base-zh）——历史对话按语义召回注入上下文。
+              </p>
+            )}
+            {settings.memory.state === 'degraded' && (
+              <p className="text-xs text-amber-400">
+                已降级为 FTS5 关键词检索（语义服务不可用）
+                {settings.memory.reason && (
+                  <span className="text-neutral-500">：{settings.memory.reason}</span>
+                )}
+                <span className="block text-neutral-500">
+                  聊天不受影响；如需恢复语义检索，请检查 PYTHON_EXECUTABLE 与 embedding 模型配置后重启服务。
+                </span>
+              </p>
+            )}
+            {settings.memory.state === 'unverified' && (
+              <p className="text-xs text-neutral-500">
+                尚未验证——完成一轮对话后自动确认。未安装 Python 语义服务时自动降级为 FTS5 关键词检索。
+              </p>
+            )}
+          </section>
+        )}
 
         <section aria-label="主动行为" className="space-y-3 rounded-lg border border-neutral-800 p-3">
           <h3 className="text-sm font-semibold text-neutral-300">主动行为</h3>

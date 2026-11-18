@@ -38,7 +38,7 @@ import {
   loadInjectableSummaries,
 } from './summary-context';
 import { loadMemoryConfig } from '../config/memory';
-import { createPythonMemoryClient, type MemoryClient } from './memory-client';
+import { getSharedMemoryClient, type MemoryClient } from './memory-client';
 import { scheduleFactExtraction } from '../extraction/pipeline';
 import { searchMemories, updateLastAccessed } from '../memories/retrieval';
 import { maybeTriggerSummary, reconsolidateHits, runSummaryTask } from '../memories/lifecycle';
@@ -393,7 +393,7 @@ export async function runChatPipeline(
   const persisted = existing
     ? { messageId: existing.userMessageId, conversationId: body.conversationId, agentId: existing.agentId }
     : persistUserMessage(handle, body, now);
-  const memoryClient = memory === undefined ? createPythonMemoryClient() : memory;
+  const memoryClient = memory === undefined ? getSharedMemoryClient() : memory;
   const recent = loadRecentWindow(handle, persisted.conversationId, 30);
 
   // 方案 1：聊天前独立抽取情绪 → 落库状态事件（失败降级不产生事件）

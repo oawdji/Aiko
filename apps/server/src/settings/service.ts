@@ -17,6 +17,7 @@ import type { DbHandle } from '../db/client';
 import { appSettings } from '../db/schema';
 import { getChatModel } from '../llm/provider';
 import { loadProactiveConfig } from '../proactive/config';
+import { getMemoryRetrievalStatus } from '../chat/memory-client';
 
 /** §12.4 推导规则失败（maxContextMessages 为奇数等）时抛出，route 映射 400。 */
 export class SettingsValidationError extends Error {
@@ -132,6 +133,7 @@ export function getSettingsResponse(handle: DbHandle): SettingsResponse {
   return SettingsResponseSchema.parse({
     settings: readAppSettings(handle),
     llm: toConnectionInfo(resolveEffectiveLlmSettings(handle)),
+    memory: getMemoryRetrievalStatus(),
   });
 }
 

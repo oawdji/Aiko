@@ -316,9 +316,16 @@ export const StateEventPageResponseSchema = z.object({
     .nullable(),
 });
 
+/** 语义检索可用性状态（透明降级）：unverified=尚未经过真实调用验证。 */
+export const MemoryRetrievalStatusSchema = z.object({
+  state: z.enum(['unverified', 'ok', 'degraded']),
+  reason: z.string().nullable(),
+});
+
 export const SettingsResponseSchema = z.object({
   settings: AppSettingsSchema,
   llm: LlmConnectionInfoSchema,
+  memory: MemoryRetrievalStatusSchema.optional(),
 });
 
 export const LlmConnectionTestResponseSchema = z.object({
@@ -366,6 +373,7 @@ export type ConversationDetailResponse = z.infer<typeof ConversationDetailRespon
 export type AgentStateResponse = z.infer<typeof AgentStateResponseSchema>;
 export type StateEventPageResponse = z.infer<typeof StateEventPageResponseSchema>;
 export type SettingsResponse = z.infer<typeof SettingsResponseSchema>;
+export type MemoryRetrievalStatus = z.infer<typeof MemoryRetrievalStatusSchema>;
 export type LlmConnectionTestResponse = z.infer<typeof LlmConnectionTestResponseSchema>;
 // ---------------------------------------------------------------------------
 // 健康检查（内部运维端点，非对外契约）

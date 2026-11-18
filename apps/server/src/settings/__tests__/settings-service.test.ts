@@ -74,6 +74,12 @@ describe('settings service', () => {
     expect(response.llm.apiKeyHint).toBeNull();
   });
 
+  it('exposes memory retrieval status (transparent degradation)', () => {
+    const response = getSettingsResponse(handle);
+    expect(response.memory).toBeDefined();
+    expect(['unverified', 'ok', 'degraded']).toContain(response.memory!.state);
+  });
+
   it('derives maxContextMessages from recentWindowRounds', () => {
     const response = updateSettings(handle, { recentWindowRounds: 10 }, NOW);
     expect(response.settings.recentWindowRounds).toBe(10);
