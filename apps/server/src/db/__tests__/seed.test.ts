@@ -46,11 +46,11 @@ describe('seedDefaultData', () => {
     expect(agent.current_valence).toBe(0);
     expect(agent.current_arousal).toBe(0);
     expect(agent.current_tag).toBe('neutral');
-    expect(agent.active_persona_version).toBe(1);
+    expect(agent.active_persona_version).toBe(2);
     handle.sqlite.close();
   });
 
-  it('seeds persona version 1 with content and hash from the generated source', () => {
+  it('seeds default persona version (v2) with content and hash from the generated source', () => {
     const handle = makeFreshHandle();
     seedDefaultData(handle, '2026-11-12T00:00:00.000Z');
 
@@ -64,7 +64,7 @@ describe('seedDefaultData', () => {
       is_active: number;
     };
 
-    expect(persona.version).toBe(1);
+    expect(persona.version).toBe(2);
     expect(persona.is_active).toBe(1);
     expect(persona.persona_core_md).toBe(PERSONA_CORE_MD);
     expect(persona.persona_core_hash).toBe(PERSONA_CORE_HASH);
@@ -87,7 +87,13 @@ describe('seedDefaultData', () => {
     expect(byKey['recent_window_rounds']).toBe('15');
     expect(byKey['max_context_messages']).toBe('30');
     expect(byKey['theme']).toBe('"system"');
-    expect(rows).toHaveLength(5);
+    expect(byKey['proactive_enabled']).toBe('false');
+    expect(byKey['proactive_idle_minutes']).toBe('30');
+    expect(byKey['proactive_max_per_24h']).toBe('3');
+    expect(byKey['proactive_quiet_start']).toBe('"22:00"');
+    expect(byKey['proactive_quiet_end']).toBe('"08:00"');
+    expect(byKey['proactive_min_interval_minutes']).toBe('60');
+    expect(rows).toHaveLength(11);
     handle.sqlite.close();
   });
 
@@ -106,7 +112,7 @@ describe('seedDefaultData', () => {
 
     expect(count('agents')).toBe(1);
     expect(count('persona_versions')).toBe(1);
-    expect(count('app_settings')).toBe(5);
+    expect(count('app_settings')).toBe(11);
     handle.sqlite.close();
   });
 

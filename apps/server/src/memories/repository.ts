@@ -6,7 +6,7 @@ import {
   type MemoryType,
 } from '@aiko/shared';
 import type { DbHandle } from '../db/client';
-import { memories, type Memory, type NewMemory } from '../db/schema';
+import { memories, messages, type Memory, type NewMemory } from '../db/schema';
 import { ensureMemorySearchIndex, normalizeForFts } from './search-index';
 
 /**
@@ -70,27 +70,63 @@ export function findMemoryById(
     .get();
 }
 
-export function listMemories(
-  handle: DbHandle,
-  owner: MemoryOwner,
-  query: MemoryListQuery,
-): MemoryFactDTO[] {
+function escapeLike(text: string): string {
+  return text.replace(/[\\%_]/g, (ch) => '\\' + ch);
+}
+
+function buildFilters(owner: MemoryOwner, query: MemoryListQuery) {
   const conditions = [
     eq(memories.userId, owner.userId),
     eq(memories.agentId, owner.agentId),
   ];
   if (query.status) conditions.push(eq(memories.status, query.status));
   if (query.type) conditions.push(eq(memories.type, query.type));
+  if (query.q) {
+    const pattern = '%' + escapeLike(query.q) + '%';
+    conditions.push(sql`${memories.content} LIKE ${pattern} ESCAPE '\\'`);
+  }
+  return conditions;
+}
 
+export function listMemories(
+  handle: DbHandle,
+  owner: MemoryOwner,
+  query: MemoryListQuery,
+): MemoryFactDTO[] {
   const rows = handle.db
-    .select()
+    .select({
+      memory: memories,
+      sourceContent: messages.content,
+      sourceConversationId: messages.conversationId,
+    })
     .from(memories)
-    .where(and(...conditions))
+    .leftJoin(messages, eq(messages.id, memories.sourceMessageId))
+    .where(and(...buildFilters(owner, query)))
     .orderBy(sql`${memories.createdAt} desc`)
     .limit(query.limit)
     .offset(query.offset)
     .all();
-  return rows.map(toDto);
+  return rows.map((row) => ({
+    ...toDto(row.memory),
+    ...(row.sourceContent !== null ? { sourceContent: row.sourceContent } : {}),
+    ...(row.sourceConversationId !== null
+      ? { sourceConversationId: row.sourceConversationId }
+      : {}),
+  }));
+}
+
+/** 与列表同过滤条件的总数（分页用）。 */
+export function countMemories(
+  handle: DbHandle,
+  owner: MemoryOwner,
+  query: MemoryListQuery,
+): number {
+  const row = handle.db
+    .select({ n: sql<number>`count(*)` })
+    .from(memories)
+    .where(and(...buildFilters(owner, query)))
+    .get();
+  return row?.n ?? 0;
 }
 
 export function updateMemoryRow(

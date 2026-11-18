@@ -34,7 +34,8 @@ export const MemoryFactDTOSchema = z.object({
   agentId: z.string(),
   type: MemoryTypeSchema,
   content: z.string(),
-  sourceMessageId: z.string(),
+  /** 来源消息（会话删除后可为 null，记忆本身保留） */
+  sourceMessageId: z.string().nullable(),
   confidence: z.number().min(0).max(1),
   status: MemoryStatusSchema,
   memoryPad: MemoryPadSchema,
@@ -44,6 +45,9 @@ export const MemoryFactDTOSchema = z.object({
   lastAccessedAt: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  /** 来源消息内容摘要与所属会话（列表接口联查返回，可选新增字段） */
+  sourceContent: z.string().optional(),
+  sourceConversationId: z.string().optional(),
 });
 export type MemoryFactDTO = z.infer<typeof MemoryFactDTOSchema>;
 
@@ -51,6 +55,8 @@ export type MemoryFactDTO = z.infer<typeof MemoryFactDTOSchema>;
 export const MemoryListQuerySchema = z.object({
   status: MemoryStatusSchema.optional(),
   type: MemoryTypeSchema.optional(),
+  /** 内容关键词（LIKE 包含匹配，%/_/\ 自动转义） */
+  q: z.string().max(200).optional(),
   limit: z.number().int().min(1).max(100).default(50),
   offset: z.number().int().min(0).default(0),
 });
@@ -59,6 +65,8 @@ export type MemoryListQuery = z.infer<typeof MemoryListQuerySchema>;
 /** GET /api/memories 响应 */
 export const MemoryListResponseSchema = z.object({
   memories: z.array(MemoryFactDTOSchema),
+  /** 同过滤条件总数（分页用，可选新增字段） */
+  total: z.number().int().min(0).optional(),
 });
 export type MemoryListResponse = z.infer<typeof MemoryListResponseSchema>;
 
@@ -68,6 +76,14 @@ export const MemoryPatchBodySchema = z.object({
   type: MemoryTypeSchema.optional(),
 });
 export type MemoryPatchBody = z.infer<typeof MemoryPatchBodySchema>;
+
+/** DELETE /api/memories 响应（清空全部记忆，F18 数据控制） */
+export const MemoryClearResponseSchema = z.object({
+  ok: z.literal(true),
+  clearedAt: z.string(),
+  count: z.number().int().min(0),
+});
+export type MemoryClearResponse = z.infer<typeof MemoryClearResponseSchema>;
 
 /** 会话摘要 DTO（F14） */
 export const ConversationSummaryDTOSchema = z.object({

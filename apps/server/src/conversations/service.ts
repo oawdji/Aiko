@@ -173,3 +173,53 @@ export function getConversationDetail(
         : null,
   });
 }
+export type DeleteConversationsResult = {
+  deletedAt: string;
+  count: number;
+};
+
+function deleteConversationRows(handle: DbHandle, conversationId: string): void {
+  // 顺序：RESTRICT 外键的子表先行；prompt_snapshots 随会话级联删除
+  handle.sqlite.prepare('DELETE FROM state_events WHERE conversation_id = ?').run(conversationId);
+  handle.sqlite.prepare('DELETE FROM conversation_summaries WHERE conversation_id = ?').run(conversationId);
+  handle.sqlite.prepare('DELETE FROM messages WHERE conversation_id = ?').run(conversationId);
+  handle.sqlite.prepare('DELETE FROM conversations WHERE id = ?').run(conversationId);
+}
+
+/**
+ * 删除单个会话（F18 数据控制延伸）：
+ * - 移除消息、状态事件、会话摘要与 Prompt 快照；
+ * - 长期记忆保留，其来源链接由 FK ON DELETE SET NULL 自动解除；
+ * - 该会话的语义向量切片暂不清理（向量库无会话维度），清空全部时统一清理。
+ */
+export function deleteConversation(
+  handle: DbHandle,
+  conversationId: string,
+): DeleteConversationsResult {
+  const exists = handle.db
+    .select({ id: conversations.id })
+    .from(conversations)
+    .where(eq(conversations.id, conversationId))
+    .get();
+  if (!exists) {
+    throw new ConversationNotFoundError(conversationId);
+  }
+  handle.sqlite.transaction(() => deleteConversationRows(handle, conversationId))();
+  return { deletedAt: new Date().toISOString(), count: 1 };
+}
+
+/** 清空全部会话。长期记忆保留；语义向量库由 route 层异步清空。 */
+export function clearConversations(handle: DbHandle): DeleteConversationsResult {
+  const count = (
+    handle.sqlite.prepare('SELECT COUNT(*) AS n FROM conversations').get() as {
+      n: number;
+    }
+  ).n;
+  handle.sqlite.transaction(() => {
+    handle.sqlite.prepare('DELETE FROM state_events').run();
+    handle.sqlite.prepare('DELETE FROM conversation_summaries').run();
+    handle.sqlite.prepare('DELETE FROM messages').run();
+    handle.sqlite.prepare('DELETE FROM conversations').run();
+  })();
+  return { deletedAt: new Date().toISOString(), count };
+}

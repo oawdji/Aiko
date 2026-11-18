@@ -37,6 +37,14 @@ export const IsoDateTimeSchema = z.string().datetime({ offset: false });
 // 核心实体 DTO
 // ---------------------------------------------------------------------------
 
+export const ChatMessageMetadataSchema = z
+  .object({
+    proactive: z.boolean().optional(),
+    strategy: z.string().optional(),
+  })
+  .optional();
+export type ChatMessageMetadata = z.infer<typeof ChatMessageMetadataSchema>;
+
 export const ChatMessageDTOSchema = z.object({
   id: z.string().min(1),
   conversationId: z.string().min(1),
@@ -46,6 +54,8 @@ export const ChatMessageDTOSchema = z.object({
   status: ChatMessageStatusSchema,
   errorCode: z.string().min(1).nullable(),
   createdAt: IsoDateTimeSchema,
+  /** 主动消息标记（Phase 4，可选新增字段） */
+  metadata: ChatMessageMetadataSchema,
 });
 
 export const ConversationDTOSchema = z.object({
@@ -123,12 +133,25 @@ export const AgentStateEventSchema = z
 export const AppThemeSchema = z.enum(['light', 'dark', 'system']);
 export type AppTheme = z.infer<typeof AppThemeSchema>;
 
+const HHMM_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+export const ProactiveSettingsSchema = z.object({
+  enabled: z.boolean(),
+  idleMinutes: z.number().int().min(1).max(1440),
+  maxPer24h: z.number().int().min(1).max(50),
+  quietStart: z.string().regex(HHMM_PATTERN),
+  quietEnd: z.string().regex(HHMM_PATTERN),
+  minIntervalMinutes: z.number().int().min(0).max(1440),
+});
+export type ProactiveSettings = z.infer<typeof ProactiveSettingsSchema>;
+
 export const AppSettingsSchema = z
   .object({
     defaultAgentId: z.string().min(1),
     recentWindowRounds: z.number().int().min(10).max(15),
     maxContextMessages: z.number().int().min(20).max(30),
     theme: AppThemeSchema,
+    proactive: ProactiveSettingsSchema,
   })
   .refine(
     (settings) => settings.maxContextMessages === settings.recentWindowRounds * 2,
@@ -159,6 +182,7 @@ export const UpdateSettingsRequestBodySchema = z
     llmBaseUrl: z.string().url().optional(),
     llmModel: z.string().min(1).optional(),
     llmApiKey: z.string().min(1).nullable().optional(),
+    proactive: ProactiveSettingsSchema.partial().optional(),
   })
   .refine(
     (body) =>
@@ -187,6 +211,17 @@ export const ApiErrorCodeSchema = z.enum([
   'RATE_LIMITED',
   'LLM_REQUEST_FAILED',
   'INTERNAL_ERROR',
+  // 受控人格演化（P3）
+  'PERSONA_PROPOSAL_NOT_FOUND',
+  'PERSONA_VERSION_NOT_FOUND',
+  'PERSONA_PROPOSAL_STATE',
+  'PERSONA_BASE_CHANGED',
+  'PERSONA_RATE_LIMITED',
+  'PERSONA_PATCH_INVALID',
+  'PERSONA_NO_ACTIVE',
+  'PERSONA_CORE_INVALID',
+  // Phase 4 主动行为
+  'PROACTIVE_CONVERSATION_NOT_FOUND',
 ]);
 
 export const ApiErrorSchema = z.object({
@@ -291,6 +326,13 @@ export const LlmConnectionTestResponseSchema = z.object({
   errorCode: z.string().min(1).nullable(),
 });
 
+/** DELETE /api/conversations[/:id] 响应（会话删除/清空） */
+export const ConversationDeleteResponseSchema = z.object({
+  ok: z.literal(true),
+  deletedAt: z.string(),
+  count: z.number().int().min(0),
+});
+
 // ---------------------------------------------------------------------------
 // 静态类型（由 schema 推导，保证类型与校验规则一致）
 // ---------------------------------------------------------------------------
@@ -299,6 +341,7 @@ export type ChatMessageDTO = z.infer<typeof ChatMessageDTOSchema>;
 export type ConversationDTO = z.infer<typeof ConversationDTOSchema>;
 export type ConversationListItem = z.infer<typeof ConversationListItemSchema>;
 export type ConversationListResponse = z.infer<typeof ConversationListResponseSchema>;
+export type ConversationDeleteResponse = z.infer<typeof ConversationDeleteResponseSchema>;
 export type AgentDTO = z.infer<typeof AgentDTOSchema>;
 export type AgentStateEvent = z.infer<typeof AgentStateEventSchema>;
 export type AppSettings = z.infer<typeof AppSettingsSchema>;

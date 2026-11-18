@@ -9,8 +9,8 @@ import { agents, appSettings, personaVersions } from './schema';
 import type { DbHandle } from './client';
 
 // DEFAULT_AGENT_ID / DEFAULT_AGENT_SLUG 来自 @aiko/shared（单一事实来源）
-export const DEFAULT_PERSONA_ID = 'persona-default-v1';
-export const DEFAULT_PERSONA_VERSION = 1;
+export const DEFAULT_PERSONA_ID = 'persona-default-v2';
+export const DEFAULT_PERSONA_VERSION = 2;
 
 const DEFAULT_SETTINGS: Array<[key: string, valueJson: string]> = [
   ['default_agent_id', JSON.stringify(DEFAULT_AGENT_ID)],
@@ -18,6 +18,13 @@ const DEFAULT_SETTINGS: Array<[key: string, valueJson: string]> = [
   ['max_context_messages', JSON.stringify(30)],
   ['theme', JSON.stringify('system')],
   ['debug_mode', JSON.stringify(false)],
+  // Phase 4 主动行为：默认关闭（requirements.md 明确默认不主动）
+  ['proactive_enabled', JSON.stringify(false)],
+  ['proactive_idle_minutes', JSON.stringify(30)],
+  ['proactive_max_per_24h', JSON.stringify(3)],
+  ['proactive_quiet_start', JSON.stringify('22:00')],
+  ['proactive_quiet_end', JSON.stringify('08:00')],
+  ['proactive_min_interval_minutes', JSON.stringify(60)],
 ];
 
 /**
@@ -80,6 +87,11 @@ export function seedDefaultData(handle: DbHandle, now: string): void {
         .get();
 
       if (!existingPersona) {
+        // 新默认版本插入为活跃前，先停用旧活跃版本
+        // （persona_versions 有 partial unique index：每 agent 仅一行 active）
+        handle.sqlite
+          .prepare('UPDATE persona_versions SET is_active = 0 WHERE agent_id = ?')
+          .run(agent.id);
         db.insert(personaVersions)
           .values({
             id: DEFAULT_PERSONA_ID,

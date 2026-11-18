@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryFactDTOSchema, MemoryListResponseSchema } from '@aiko/shared';
 import {
+  clearMemories,
   confirmMemory,
   deleteMemory,
   fetchMemories,
   patchMemory,
   rejectMemory,
+  restoreMemory,
 } from '../memories-api';
 
 const fact = MemoryFactDTOSchema.parse({
@@ -26,7 +28,7 @@ const fact = MemoryFactDTOSchema.parse({
   updatedAt: '2026-11-13T00:00:00.000Z',
 });
 
-const listBody = MemoryListResponseSchema.parse({ memories: [fact] });
+const listBody = MemoryListResponseSchema.parse({ memories: [fact], total: 1 });
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -44,7 +46,8 @@ describe('memories-api domain functions', () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(listBody));
     vi.stubGlobal('fetch', fetchMock);
     const data = await fetchMemories({ status: 'active', type: 'fact', limit: 50 });
-    expect(data).toHaveLength(1);
+    expect(data.memories).toHaveLength(1);
+    expect(data.total).toBe(1);
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/memories?status=active&type=fact&limit=50',
       expect.objectContaining({ method: 'GET' }),
@@ -85,3 +88,27 @@ describe('memories-api domain functions', () => {
     await expect(fetchMemories()).rejects.toMatchObject({ code: 'MEM_NOT_FOUND', status: 404 });
   });
 });
+
+  it('restores an outdated memory via POST restore', async () => {
+    const restored = { ...fact, status: 'active' };
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(restored));
+    vi.stubGlobal('fetch', fetchMock);
+    await restoreMemory('mem_1');
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/memories/mem_1/restore',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('clears all memories via DELETE /api/memories', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({ ok: true, clearedAt: '2026-11-16T00:00:00.000Z', count: 3 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const res = await clearMemories();
+    expect(res).toEqual({ ok: true, clearedAt: '2026-11-16T00:00:00.000Z', count: 3 });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/memories',
+      expect.objectContaining({ method: 'DELETE' }),
+    );
+  });

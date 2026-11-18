@@ -10,6 +10,7 @@ import {
 import { getDb } from '../db';
 import type { Context } from 'hono';
 import {
+  clearAllMemories,
   confirmMemory,
   deleteMemory,
   getMemories,
@@ -40,6 +41,7 @@ function parseListQuery(url: string) {
   return MemoryListQuerySchema.safeParse({
     status: sp.get('status') ?? undefined,
     type: sp.get('type') ?? undefined,
+    q: sp.get('q') ?? undefined,
     limit: limit === null ? undefined : Number(limit),
     offset: offset === null ? undefined : Number(offset),
   });
@@ -67,7 +69,8 @@ export const memoriesRoute = new Hono()
     }
     try {
       refreshStrengths(getDb(), resolveOwner(), new Date().toISOString());
-      return c.json({ memories: getMemories(getDb(), resolveOwner(), parsed.data) });
+      const result = getMemories(getDb(), resolveOwner(), parsed.data);
+      return c.json({ memories: result.memories, total: result.total });
     } catch (error) {
       return handleError(c, error, '*');
     }
@@ -94,6 +97,14 @@ export const memoriesRoute = new Hono()
       return c.json(patchMemory(getDb(), resolveOwner(), id, parsed.data));
     } catch (error) {
       return handleError(c, error, id);
+    }
+  })
+  .delete('/memories', (c) => {
+    try {
+      const result = clearAllMemories(getDb(), resolveOwner());
+      return c.json({ ok: true, clearedAt: result.clearedAt, count: result.count });
+    } catch (error) {
+      return handleError(c, error, '*');
     }
   })
   .delete('/memories/:id', (c) => {

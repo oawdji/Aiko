@@ -8,6 +8,7 @@ const okSettings = SettingsResponseSchema.parse({
     recentWindowRounds: 15,
     maxContextMessages: 30,
     theme: 'dark',
+    proactive: { enabled: false, idleMinutes: 30, maxPer24h: 3, quietStart: '22:00', quietEnd: '08:00', minIntervalMinutes: 60 },
   },
   llm: {
     baseUrl: 'https://api.deepseek.com',

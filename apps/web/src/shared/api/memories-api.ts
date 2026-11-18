@@ -1,8 +1,11 @@
 import {
+  MemoryClearResponseSchema,
   MemoryListResponseSchema,
   MemoryFactDTOSchema,
+  type MemoryClearResponse,
   type MemoryFactDTO,
   type MemoryListQuery,
+  type MemoryListResponse,
 } from '@aiko/shared';
 import { requestJson, type RequestOptions } from './client';
 
@@ -24,10 +27,8 @@ function qs(query: Partial<MemoryListQuery>): string {
 export function fetchMemories(
   query: Partial<MemoryListQuery> = {},
   options: RequestOptions = {},
-): Promise<MemoryFactDTO[]> {
-  return requestJson(`/memories${qs(query)}`, MemoryListResponseSchema, options).then(
-    (r) => r.memories,
-  );
+): Promise<MemoryListResponse> {
+  return requestJson(`/memories${qs(query)}`, MemoryListResponseSchema, options);
 }
 
 export function patchMemory(
@@ -67,6 +68,27 @@ export function rejectMemory(
   options: RequestOptions = {},
 ): Promise<MemoryFactDTO> {
   return requestJson(`/memories/${id}/reject`, MemoryFactDTOSchema, {
+    ...options,
+    method: 'POST',
+  });
+}
+
+/** 清空全部记忆（不可恢复，调用方需自行二次确认）。 */
+export function clearMemories(
+  options: RequestOptions = {},
+): Promise<MemoryClearResponse> {
+  return requestJson('/memories', MemoryClearResponseSchema, {
+    ...options,
+    method: 'DELETE',
+  });
+}
+
+/** 恢复过时记忆：outdated -> active（F20）。 */
+export function restoreMemory(
+  id: string,
+  options: RequestOptions = {},
+): Promise<MemoryFactDTO> {
+  return requestJson(`/memories/${id}/restore`, MemoryFactDTOSchema, {
     ...options,
     method: 'POST',
   });

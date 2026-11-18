@@ -6,3 +6,5 @@ export * from './persona-versions';
 export * from './app-settings';export * from './memories';
 export * from './conversation-summaries';
 export * from './prompt-snapshots';
+export * from './persona-proposals';
+export * from './proactive-messages';

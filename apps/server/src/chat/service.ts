@@ -16,6 +16,9 @@ import { getChatModel } from '../llm/provider';
 import { resolveEffectiveLlmSettings } from '../settings/service';
 import type { DbHandle } from '../db/client';
 import { PERSONA_CORE_MD } from '../db/generated/persona-core';
+import { getActivePersona } from '../persona/repository';
+import { renderPersonaStyleSection } from '../persona/render';
+import { looksLikeStyleAdjustment } from '../persona/intent';
 import { agents, conversations, messages, stateEvents } from '../db/schema';
 import { type PromptMessage } from './recent-window';
 import {
@@ -31,7 +34,7 @@ import { computeDisplayState, resolveDecayConfig, revertToBaseline } from './emo
 import { buildEmotionPromptLine } from './emotion-prompt';
 import { loadMemoryConfig } from '../config/memory';
 import { createPythonMemoryClient, type MemoryClient } from './memory-client';
-import { createDefaultExtractComplete, scheduleFactExtraction } from '../extraction/pipeline';
+import { scheduleFactExtraction } from '../extraction/pipeline';
 import { searchMemories, updateLastAccessed } from '../memories/retrieval';
 import { maybeTriggerSummary, reconsolidateHits, runSummaryTask } from '../memories/lifecycle';
 import { isDebugModeEnabled } from '../settings/service';
@@ -406,7 +409,12 @@ export async function runChatPipeline(
   }
 
   // S3b：fire-and-forget 事实抽取（写入层），失败不影响聊天流
-  const memoryExtraction = scheduleFactExtraction(
+  // 受控人格演化 P3：风格调整意图的消息不进事实抽取，
+  // 避免"既生成提案参数、又沉淀偏好记忆"的双轨生效（F25/F26 边界）
+  const isStyleAdjustment = looksLikeStyleAdjustment(body.message);
+  const memoryExtraction = isStyleAdjustment
+    ? Promise.resolve(0)
+    : scheduleFactExtraction(
     handle,
     {
       owner: { userId: LOCAL_USER_ID, agentId: persisted.agentId },
@@ -460,7 +468,12 @@ export async function runChatPipeline(
       // 降级约定:检索失败不阻断对话
     }
   }
+  // P1: 注入用户确认的表达风格配置（persona_versions active 版本；读取失败降级为仅锚点）
+  const activePersona = getActivePersona(handle, persisted.agentId);
   const systemParts = [PERSONA_CORE_MD];
+  if (activePersona) {
+    systemParts.push(renderPersonaStyleSection(activePersona.evolvable, activePersona.version));
+  }
   if (emotionLine) systemParts.push(emotionLine);
   if (memoryLine) systemParts.push(memoryLine);
   if (memoryBlock) systemParts.push(memoryBlock);
@@ -492,6 +505,7 @@ export async function runChatPipeline(
         systemText: prompt.system,
         memoryIdsJson: JSON.stringify(memoryHits.map((m) => m.id)),
         recentWindowCount: String(prompt.messages.length),
+        personaVersion: activePersona?.version ?? null,
         createdAt: now,
       }).run();
     } catch (error) {
@@ -562,11 +576,7 @@ export function createChatResponse(
       }
 
       try {
-        let streamed = '';
         for await (const chunk of iterateLlmChunks(pipeline.llm.toUimessageStream())) {
-          if (chunk.type === 'text-delta') {
-            streamed += chunk.delta;
-          }
           writer.write(chunk);
         }
 

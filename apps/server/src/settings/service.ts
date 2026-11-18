@@ -16,6 +16,7 @@ import {
 import type { DbHandle } from '../db/client';
 import { appSettings } from '../db/schema';
 import { getChatModel } from '../llm/provider';
+import { loadProactiveConfig } from '../proactive/config';
 
 /** §12.4 推导规则失败（maxContextMessages 为奇数等）时抛出，route 映射 400。 */
 export class SettingsValidationError extends Error {
@@ -31,6 +32,15 @@ const MAX_CONTEXT_MESSAGES_KEY = 'max_context_messages';
 const LLM_BASE_URL_KEY = 'llm_base_url';
 const LLM_MODEL_KEY = 'llm_model';
 const LLM_API_KEY_KEY = 'llm_api_key';
+
+const PROACTIVE_KEYS = {
+  enabled: 'proactive_enabled',
+  idleMinutes: 'proactive_idle_minutes',
+  maxPer24h: 'proactive_max_per_24h',
+  quietStart: 'proactive_quiet_start',
+  quietEnd: 'proactive_quiet_end',
+  minIntervalMinutes: 'proactive_min_interval_minutes',
+} as const;
 
 function readSettingValue(handle: DbHandle, key: string): unknown {
   const row = handle.db
@@ -73,6 +83,7 @@ export function readAppSettings(handle: DbHandle) {
     recentWindowRounds: values.get('recent_window_rounds'),
     maxContextMessages: values.get('max_context_messages'),
     theme: values.get('theme'),
+    proactive: loadProactiveConfig(handle),
   });
 }
 
@@ -169,6 +180,18 @@ export function updateSettings(
     } else {
       writeSettingValue(handle, LLM_API_KEY_KEY, body.llmApiKey, now);
     }
+  }
+
+  if (body.proactive !== undefined) {
+    // 部分更新：与当前配置合并后逐键写入（seed 保证键存在，write 为 upsert）
+    const current = loadProactiveConfig(handle);
+    const merged = { ...current, ...body.proactive };
+    writeSettingValue(handle, PROACTIVE_KEYS.enabled, merged.enabled, now);
+    writeSettingValue(handle, PROACTIVE_KEYS.idleMinutes, merged.idleMinutes, now);
+    writeSettingValue(handle, PROACTIVE_KEYS.maxPer24h, merged.maxPer24h, now);
+    writeSettingValue(handle, PROACTIVE_KEYS.quietStart, merged.quietStart, now);
+    writeSettingValue(handle, PROACTIVE_KEYS.quietEnd, merged.quietEnd, now);
+    writeSettingValue(handle, PROACTIVE_KEYS.minIntervalMinutes, merged.minIntervalMinutes, now);
   }
 
   return getSettingsResponse(handle);

@@ -10,6 +10,8 @@ import { settingsRoute } from './settings/route';
 import { memoriesRoute } from './memories/route';
 import { stateTimelineRoute } from './state-timeline/route';
 import { dataControlRoute } from './data-control/route';
+import { personaRoute } from './persona/route';
+import { proactiveRoute } from './proactive/route';
 import { devMockChatRoute } from './api/dev-mock-chat';
 import { loadServerConfig } from './config/server';
 import { loadDbConfig } from './config/db';
@@ -18,6 +20,8 @@ import { getDb } from './db';
 import { runMigrations } from './db/migrate';
 import { ensureMemorySearchIndex } from './memories/search-index';
 import { seedDefaultData } from './db/seed';
+import { assertPersonaCoreIntact } from './persona/repository';
+import { DEFAULT_AGENT_ID } from '@aiko/shared';
 
 const app = new Hono();
 
@@ -36,6 +40,8 @@ app.route('/api', settingsRoute);
 app.route('/api', memoriesRoute);
 app.route('/api', stateTimelineRoute);
 app.route('/api', dataControlRoute);
+app.route('/api', personaRoute);
+app.route('/api', proactiveRoute);
 // mock 端点仅限开发环境，不随生产构建暴露
 if (process.env.NODE_ENV !== 'production') {
   app.route('/api', devMockChatRoute);
@@ -55,7 +61,8 @@ const db = getDb();
 runMigrations(db, dbConfig.migrationsFolder);
 ensureMemorySearchIndex(db);
 seedDefaultData(db, new Date().toISOString());
-console.log(`Database ready (migrations + seed applied): ${db.databasePath}`);
+assertPersonaCoreIntact(db, DEFAULT_AGENT_ID);
+console.log(`Database ready (migrations + seed applied, persona core verified): ${db.databasePath}`);
 
 serve(
   { fetch: app.fetch, hostname: '127.0.0.1', port: config.port },

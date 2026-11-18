@@ -52,6 +52,15 @@ export function mapConversationRow(row: ConversationRow) {
 }
 
 export function mapMessageRow(row: MessageRow) {
+  let metadata: { proactive?: boolean; strategy?: string } | undefined;
+  if (row.metadataJson) {
+    try {
+      const parsed = JSON.parse(row.metadataJson) as { proactive?: boolean; strategy?: string };
+      if (parsed.proactive === true) metadata = parsed;
+    } catch {
+      metadata = undefined;
+    }
+  }
   return ChatMessageDTOSchema.parse({
     id: row.id,
     conversationId: row.conversationId,
@@ -61,6 +70,7 @@ export function mapMessageRow(row: MessageRow) {
     status: row.status,
     errorCode: row.errorCode,
     createdAt: row.createdAt,
+    ...(metadata !== undefined ? { metadata } : {}),
   });
 }
 

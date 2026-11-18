@@ -146,6 +146,13 @@ class LocalMemoryRetriever:
             return []
 
 
+    # ---- 清空 --------------------------------------------------------------
+
+    def clear(self) -> int:
+        """清空全部向量数据（清空对话时调用；不涉及主库 memories 表）。"""
+        return self._store.clear()
+
+
 if __name__ == "__main__":
     # 冒烟脚本(T5 完成标准):注入确定性假 embedder,脱离模型跑通端到端。
     import tempfile

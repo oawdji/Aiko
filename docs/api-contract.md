@@ -689,6 +689,19 @@ export type ConversationDetailResponse = {
 
 ---
 
+## 8.5 `DELETE /api/conversations/:id` 与 `DELETE /api/conversations`
+
+删除单个会话 / 清空全部会话（本地单用户，无认证）。
+
+- 响应：`{ "ok": true, "deletedAt": "<ISO 8601>", "count": <删除会话数> }`；
+- 单会话不存在返回 `404 CONVERSATION_NOT_FOUND`；
+- 级联清理：消息、状态事件、会话摘要、Prompt 快照（单事务）；
+- **长期记忆保留**：`memories.source_message_id` 为可空列（`ON DELETE SET NULL`），会话删除后来源链接自动解除；
+- `DELETE /api/conversations`（清空全部）会同时清空语义向量库中的对话原文切片（向量库不可用时降级跳过，不影响主流程）；
+- 单会话删除不清理该会话的向量切片（向量库无会话维度），全量清空时统一处理。
+
+---
+
 ## 9. `GET /api/agents/:agentId/state`
 
 ## 9.1 用途
@@ -1403,11 +1416,12 @@ agents 状态快照只变化一次
 
 ---
 
-## 22. 未来扩展接口预留
+## 22. 接口扩展章节
 
-以下接口不在 MVP 中实现，仅预留命名方向。
+§22.1 记忆接口与 §22.2 人格接口已随 Phase 2 / Phase 3 实现（含完整行为说明）；
+§22.3–§22.5 为后续阶段预留命名方向。
 
-## 22.1 记忆接口
+## 22.1 记忆接口（Phase 2 已实现）
 
 ```http
 GET    /api/memories
@@ -1415,25 +1429,104 @@ PATCH  /api/memories/:id
 DELETE /api/memories/:id
 POST   /api/memories/:id/confirm
 POST   /api/memories/:id/reject
+POST   /api/memories/:id/restore
+DELETE /api/memories
 ```
 
-## 22.2 人格接口
+`GET /api/memories` 支持 `status` / `type` / `q`（内容关键词，LIKE 包含匹配，`%`/`_`/`\` 自动转义）/ `limit` / `offset`；响应含 `total`（同过滤条件总数）；列表项含 `sourceContent` / `sourceConversationId`（来源消息联查）。
+
+`DELETE /api/memories`（清空全部记忆）：
+
+- owner（userId + agentId）范围内**硬删除**全部记忆，并同步清空 `memories_fts` 全文索引，单事务；
+- 与单条 `DELETE /api/memories/:id`（软删除，可恢复）不同，本操作**不可恢复**；
+- 响应：`{ "ok": true, "clearedAt": "<ISO 8601>", "count": <清除条数> }`；空库幂等返回 `count: 0`；
+- 不影响人格锚点、对话消息与状态事件（全量清空见 §22.4 数据控制接口）。
+
+## 22.2 人格接口（Phase 3 已实现）
+
+设计细节见 [persona-evolution-design.md](./persona-evolution-design.md)。所有端点默认作用于 `DEFAULT_AGENT_ID`，可用 `agentId` 查询参数覆盖。
+
+### 端点一览
 
 ```http
 POST /api/persona/propose
-GET  /api/persona/proposals
+GET  /api/persona/proposals?agentId=&status=
 POST /api/persona/proposals/:id/approve
 POST /api/persona/proposals/:id/reject
+GET  /api/persona/versions?agentId=
 POST /api/persona/versions/:version/rollback
+GET  /api/persona/core
+PUT  /api/persona/core
 ```
 
-## 22.3 主动消息接口
+### POST /persona/propose
+
+请求体：`{ "requestText": string(1~2000), "agentId"?: string }`。
+
+- 流程：LLM 结构化输出 → strict 白名单校验 → 幅度校验 → 落库 `pending`（24h 有效）；
+- 响应 `201`：PersonaProposalDTO（`id / agentId / baseVersion / requestText / patch / diffSummary / status / source / expiresAt / createdAt / reviewedAt`）；
+- patch 字段白名单：`verbosity`（一次一档）/ `warmth` / `humor` / `proactiveQuestions`（单次 |Δ| ≤ 0.2）；`notes` 第一版禁改；
+- 频率限制：pending ≥ 1 或距上一提案 < 60min → `429 PERSONA_RATE_LIMITED`；
+- LLM 输出无法解析 / 超幅度 / 空补丁 → `422 PERSONA_PATCH_INVALID`（拒绝，不自动修复）。
+
+### GET /persona/proposals
+
+- 查询参数：`status`（pending/approved/rejected/expired）、`agentId`；
+- 响应：`{ proposals: PersonaProposalDTO[] }`（新→旧）。
+
+### POST /persona/proposals/:id/approve
+
+- 唯一的人格参数写路径，单事务：状态复核 → 过期检查 → **base_version 并发守卫** → 补丁复核 → 追加新版本行（锚点与 hash 原样复制）→ 指针切换 → 提案置 approved；
+- 响应 `200`：`{ ok: true, version: number, evolvable: PersonaEvolvable }`；
+- 错误：`404 PERSONA_PROPOSAL_NOT_FOUND`、`409 PERSONA_PROPOSAL_STATE`（非 pending）、`409 PERSONA_BASE_CHANGED`（base 落后，需重新生成提案）、`422 PERSONA_PATCH_INVALID`。
+
+### POST /persona/proposals/:id/reject
+
+- 仅 pending 可拒绝；响应 `200` PersonaProposalDTO（status=rejected）。
+
+### GET /persona/versions
+
+- 响应：`{ versions: Array<{ version, personaCoreHash, evolvable, isActive, createdAt, activatedAt }> }`（新→旧）。
+
+### POST /persona/versions/:version/rollback
+
+- **追加式回滚**：插入内容等于目标版本的新版本行，并写入 `source=rollback` 的已批准提案记录（审计链完整）；不修改历史行；
+- 响应 `200`：`{ ok: true, version: number, evolvable }`；目标已是活跃版本 → `409 PERSONA_PROPOSAL_STATE`；目标不存在 → `404 PERSONA_VERSION_NOT_FOUND`。
+
+### GET /api/persona/core · PUT /api/persona/core（锚点手动编辑，本地所有者权限）
+
+- `GET` 返回 `{ version, personaCoreHash, coreMd }`；
+- `PUT` 请求体 `{ coreMd }`（1~32000 字符），响应 `{ ok, version, personaCoreHash, evolvable }`；
+- 编辑以**追加式新版本**生效（沿用当前 evolvable），写入 `source=user_request` 审计记录；
+- 聊天/LLM/检索内容对锚点**无任何写路径**（F26 不变）；空正文返回 `400 INVALID_REQUEST` / `422 PERSONA_PATCH_INVALID`（service 层空文本校验）。
+
+### 治理规则（F21–F28 摘要）
+
+1. 聊天消息、流式回复、检索内容、工具返回**没有**任何 persona 写入口；prompt 注入样本无法产生提案或修改版本；
+2. 未确认提案不影响 Prompt（活跃版本不变）；
+3. 锚点编辑产生新版本后，落后提案 approve 返回 409 需重新生成；
+4. 历史版本不可物理覆盖；回滚为追加式。
+
+## 22.3 主动消息接口（Phase 4 已实现）
 
 ```http
 POST /api/proactive/evaluate
+GET  /api/proactive/history?agentId=&limit=
 ```
 
-只在浏览器页面打开期间由前端调用，不作为后端离线调度入口。
+**POST /proactive/evaluate**（前端空闲计时器触发；仅页面存活期间）：
+
+- 请求体：`{ conversationId, localMinutesOfDay (0–1439), agentId? }`；
+- 响应：`{ send: boolean, reason: string|null, message: { id, conversationId, content, strategy, createdAt } | null }`；
+- 时机策略（服务端复验）：开关（默认关）→ 滚动 24h 上限（默认 3）→ 最小间隔（默认 60min）→ 免打扰时段（默认 22:00–08:00，跨午夜支持）→ 空闲阈值（默认 30min）；
+- 内容策略（按优先级）：情绪关怀（上次负面情绪 ≥24h 沉淀且未跟进）→ 记忆回想（≥7 天未访问的 active 记忆）→ 好奇提问（最近话题兜底）；全部不满足 → send=false（no_strategy）；
+- 命中时：assistant 消息写入 `messages`（metadata 标记 proactive/strategy/evidence）+ `proactive_messages` 审计；
+- 生成失败降级为 send=false（generation_failed），不重试；
+- **无状态决策：被抑制不落库、不补发**；页面关闭/刷新后前端计时器消失，天然不触发。
+
+**GET /proactive/history**：`{ messages: Array<{ id, conversationId, strategy, evidenceText, createdAt, content }> }`（新→旧，含正文）。
+
+**配置**：经 `PATCH /api/settings` 的 `proactive` 字段（enabled/idleMinutes/maxPer24h/quietStart/quietEnd/minIntervalMinutes），默认值见 seed。
 
 ## 22.4 数据控制接口
 

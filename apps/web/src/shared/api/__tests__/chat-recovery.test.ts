@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClientError } from '../errors';
-import { fetchBootstrap, fetchConversation, fetchConversationList } from '../chat-recovery';
+import {
+  clearConversations,
+  deleteConversation,
+  fetchBootstrap,
+  fetchConversation,
+  fetchConversationList,
+} from '../chat-recovery';
 
 const okBootstrap = {
   user: { id: 'local-user' },
@@ -32,6 +38,7 @@ const okBootstrap = {
     recentWindowRounds: 15,
     maxContextMessages: 30,
     theme: 'system',
+    proactive: { enabled: false, idleMinutes: 30, maxPer24h: 3, quietStart: '22:00', quietEnd: '08:00', minIntervalMinutes: 60 },
   },
 };
 
@@ -126,5 +133,33 @@ describe('web API client (M2.4)', () => {
     );
     const error = await fetchBootstrap(undefined, { signal: controller.signal }).catch((e) => e);
     expect(error.code).toBe('CLIENT_ABORTED');
+  });
+});
+describe('conversation deletion API', () => {
+  it('deletes a conversation via DELETE /api/conversations/:id', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({ ok: true, deletedAt: '2026-11-16T00:00:00.000Z', count: 1 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const res = await deleteConversation('conv_1');
+    expect(res.ok).toBe(true);
+    expect(res.count).toBe(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/conversations/conv_1',
+      expect.objectContaining({ method: 'DELETE' }),
+    );
+  });
+
+  it('clears all conversations via DELETE /api/conversations', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({ ok: true, deletedAt: '2026-11-16T00:00:00.000Z', count: 5 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const res = await clearConversations();
+    expect(res.count).toBe(5);
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/conversations',
+      expect.objectContaining({ method: 'DELETE' }),
+    );
   });
 });

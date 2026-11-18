@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react';
-import type { LlmConnectionTestResponse, SettingsResponse } from '@aiko/shared';
+import type {
+  LlmConnectionTestResponse,
+  ProactiveSettings,
+  SettingsResponse,
+} from '@aiko/shared';
 import { ApiClientError } from '../../shared/api/errors';
+import { fetchProactiveHistory } from '../../proactive/api/proactive-api';
 import {
   testLlmConnection,
   updateSettings,
@@ -35,15 +40,30 @@ export function SettingsDialog({ open, settings, onSaved, onClose }: Props) {
   const [notice, setNotice] = useState<string | null>(null);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<LlmConnectionTestResponse | null>(null);
+  const [proactive, setProactive] = useState<ProactiveSettings>({
+    enabled: false,
+    idleMinutes: 30,
+    maxPer24h: 3,
+    quietStart: '22:00',
+    quietEnd: '08:00',
+    minIntervalMinutes: 60,
+  });
+  const [proactiveHistory, setProactiveHistory] = useState<
+    Array<{ id: string; strategy: string; evidenceText: string; createdAt: string; content: string }>
+  >([]);
 
   useEffect(() => {
     if (open && settings) {
       setBaseUrl(settings.llm.baseUrl);
       setModel(settings.llm.model);
       setApiKey('');
+      setProactive(settings.settings.proactive);
       setNotice(null);
       setErrorText(null);
       setTestResult(null);
+      fetchProactiveHistory()
+        .then((r) => setProactiveHistory(r.messages.slice(0, 10)))
+        .catch(() => setProactiveHistory([]));
     }
   }, [open, settings]);
 
@@ -60,6 +80,14 @@ export function SettingsDialog({ open, settings, onSaved, onClose }: Props) {
         llmBaseUrl: baseUrl || undefined,
         llmModel: model || undefined,
         llmApiKey: apiKey ? apiKey : undefined,
+        proactive: {
+          enabled: proactive.enabled,
+          idleMinutes: Number(proactive.idleMinutes),
+          maxPer24h: Number(proactive.maxPer24h),
+          quietStart: proactive.quietStart,
+          quietEnd: proactive.quietEnd,
+          minIntervalMinutes: Number(proactive.minIntervalMinutes),
+        },
       });
       onSaved(saved);
       setApiKey('');
@@ -115,6 +143,90 @@ export function SettingsDialog({ open, settings, onSaved, onClose }: Props) {
           兼容 OpenAI 格式的端点（DeepSeek、第三方中转、本地 vLLM/Ollama）。
           API Key 只写不读，保存后立即生效。
         </p>
+
+        <section aria-label="主动行为" className="space-y-3 rounded-lg border border-neutral-800 p-3">
+          <h3 className="text-sm font-semibold text-neutral-300">主动行为</h3>
+          <label className="flex items-center gap-2 text-sm text-neutral-300">
+            <input
+              type="checkbox"
+              checked={proactive.enabled}
+              onChange={(e) => setProactive({ ...proactive, enabled: e.target.checked })}
+              className="size-4 accent-sky-500"
+            />
+            允许她在空闲时主动发消息（仅页面打开期间）
+          </label>
+          <div className="grid grid-cols-2 gap-2 text-xs text-neutral-400">
+            <label className="space-y-1">
+              <span>空闲阈值（分钟）</span>
+              <input
+                type="number"
+                min={1}
+                max={1440}
+                value={proactive.idleMinutes}
+                onChange={(e) => setProactive({ ...proactive, idleMinutes: Number(e.target.value) })}
+                className="w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm text-neutral-100"
+              />
+            </label>
+            <label className="space-y-1">
+              <span>24 小时上限（次）</span>
+              <input
+                type="number"
+                min={1}
+                max={50}
+                value={proactive.maxPer24h}
+                onChange={(e) => setProactive({ ...proactive, maxPer24h: Number(e.target.value) })}
+                className="w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm text-neutral-100"
+              />
+            </label>
+            <label className="space-y-1">
+              <span>免打扰开始</span>
+              <input
+                value={proactive.quietStart}
+                onChange={(e) => setProactive({ ...proactive, quietStart: e.target.value })}
+                className="w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm text-neutral-100"
+              />
+            </label>
+            <label className="space-y-1">
+              <span>免打扰结束</span>
+              <input
+                value={proactive.quietEnd}
+                onChange={(e) => setProactive({ ...proactive, quietEnd: e.target.value })}
+                className="w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm text-neutral-100"
+              />
+            </label>
+            <label className="space-y-1">
+              <span>最小间隔（分钟）</span>
+              <input
+                type="number"
+                min={0}
+                max={1440}
+                value={proactive.minIntervalMinutes}
+                onChange={(e) => setProactive({ ...proactive, minIntervalMinutes: Number(e.target.value) })}
+                className="w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm text-neutral-100"
+              />
+            </label>
+          </div>
+          {proactiveHistory.length > 0 && (
+            <details>
+              <summary className="cursor-pointer text-xs text-neutral-500">
+                主动消息历史（最近 {proactiveHistory.length} 条）
+              </summary>
+              <ul className="mt-1.5 space-y-1.5">
+                {proactiveHistory.map((m) => (
+                  <li key={m.id} className="rounded bg-neutral-950/60 px-2 py-1.5 text-xs">
+                    <span className="text-neutral-500">
+                      {new Date(m.createdAt).toLocaleString()} · {m.strategy}
+                    </span>
+                    <p className="text-neutral-300">{m.content}</p>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+          <p className="text-[10px] text-neutral-600">
+            免打扰支持跨午夜（如 22:00–08:00）；被抑制的消息不会补发；刷新或关闭页面即停止主动行为。
+          </p>
+        </section>
 
         <div className="space-y-3">
           <label className="block space-y-1">

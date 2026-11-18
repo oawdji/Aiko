@@ -70,6 +70,14 @@ describe('api schemas (M2.1)', () => {
         recentWindowRounds: 15,
         maxContextMessages: 30,
         theme: 'system',
+        proactive: {
+          enabled: false,
+          idleMinutes: 30,
+          maxPer24h: 3,
+          quietStart: '22:00',
+          quietEnd: '08:00',
+          minIntervalMinutes: 60,
+        },
       },
     };
 
@@ -116,6 +124,14 @@ describe('api schemas (M2.1)', () => {
         recentWindowRounds: 15,
         maxContextMessages: 30,
         theme: 'system',
+        proactive: {
+          enabled: false,
+          idleMinutes: 30,
+          maxPer24h: 3,
+          quietStart: '22:00',
+          quietEnd: '08:00',
+          minIntervalMinutes: 60,
+        },
       },
     });
 
@@ -154,6 +170,14 @@ describe('api schemas (M2.1)', () => {
           recentWindowRounds: 10,
           maxContextMessages: 20,
           theme: 'light',
+          proactive: {
+            enabled: false,
+            idleMinutes: 30,
+            maxPer24h: 3,
+            quietStart: '22:00',
+            quietEnd: '08:00',
+            minIntervalMinutes: 60,
+          },
         },
       }).success,
     ).toBe(false);
@@ -175,7 +199,13 @@ describe('api schemas (M2.1)', () => {
   });
 
   it('enforces maxContextMessages equals recentWindowRounds * 2', () => {
-    const valid = { defaultAgentId: 'a', recentWindowRounds: 12, maxContextMessages: 24, theme: 'dark' };
+    const valid = {
+      defaultAgentId: 'a',
+      recentWindowRounds: 12,
+      maxContextMessages: 24,
+      theme: 'dark',
+      proactive: { enabled: false, idleMinutes: 30, maxPer24h: 3, quietStart: '22:00', quietEnd: '08:00', minIntervalMinutes: 60 },
+    };
     const invalid = { ...valid, maxContextMessages: 30 };
     expect(AppSettingsSchema.safeParse(valid).success).toBe(true);
     expect(AppSettingsSchema.safeParse(invalid).success).toBe(false);

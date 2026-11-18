@@ -7,7 +7,6 @@
  */
 
 import { spawn } from 'node:child_process';
-import { loadMemoryConfig } from '../config/memory';
 import type { PromptMessage } from './recent-window';
 
 export interface MemoryClient {
@@ -15,6 +14,8 @@ export interface MemoryClient {
   indexDialogue(messages: PromptMessage[]): Promise<void>;
   /** 语义检索,返回记忆文本列表。失败返回空数组。 */
   search(query: string, topK: number): Promise<string[]>;
+  /** 清空全部对话向量(清空会话时调用)。失败不抛错。 */
+  clearVectors(): Promise<void>;
 }
 
 export const noopMemoryClient: MemoryClient = {
@@ -22,6 +23,7 @@ export const noopMemoryClient: MemoryClient = {
   async search() {
     return [];
   },
+  async clearVectors() {},
 };
 
 type CliResult = { ok: true; hits?: string[] } | { ok: false; error: string };
@@ -57,7 +59,6 @@ function runCli(cliPath: string, pythonExe: string, request: unknown, timeoutMs:
 }
 
 export function createPythonMemoryClient(options?: { pythonExe?: string; cliPath?: string }): MemoryClient {
-  const config = loadMemoryConfig();
   const pythonExe = options?.pythonExe ?? process.env.PYTHON_EXECUTABLE ?? 'python';
   const cliPath =
     options?.cliPath ?? new URL('../../../../services/retrieval/cli.py', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
@@ -82,6 +83,9 @@ export function createPythonMemoryClient(options?: { pythonExe?: string; cliPath
     async search(query, topK) {
       const result = await call({ op: 'search', query, top_k: topK });
       return result && result.ok ? (result.hits ?? []) : [];
+    },
+    async clearVectors() {
+      await call({ op: 'clear' });
     },
   };
 }
