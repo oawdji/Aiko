@@ -453,7 +453,7 @@ unique(agent_id, version)
 
 MVP 只初始化 version 1，不做修改接口。
 
-初始化内容的唯一来源是 [persona-core-v1.md](./persona-core-v1.md)：`persona_core_md` 使用该文件标记区内的正文，`evolvable_json` 使用其中定义的初始 JSON。
+初始化内容的唯一来源是 [persona-core.md](./persona-core.md)：`persona_core_md` 使用该文件标记区内的正文，`evolvable_json` 使用其中定义的初始 JSON。
 
 `persona_core_hash` 用于后续验证人格锚点没有漂移。
 
@@ -1552,7 +1552,7 @@ error_code
 - 创建 `messages`;
 - 创建 `state_events`;
 - 创建 `persona_versions`;
-- 按 [persona-core-v1.md](./persona-core-v1.md) 初始化锚点与 evolvable JSON;
+- 按 [persona-core.md](./persona-core.md) 初始化锚点与 evolvable JSON;
 - 创建 `app_settings`;
 - 实现默认 Agent 初始化。
 

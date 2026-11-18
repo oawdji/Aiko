@@ -1,7 +1,7 @@
 # SQLite 数据库结构设计
 
 项目：本地单用户拟人化聊天 Agent  
-关联文档：[requirements.md](./requirements.md)、[technical-design.md](./technical-design.md)  
+关联文档：[api-contract.md](./api-contract.md)；历史设计文档见 [archive/](./archive/)（requirements.md、technical-design.md 等）  
 数据库：SQLite  
 ORM：Drizzle ORM  
 版本：v1.2  
@@ -1044,7 +1044,7 @@ VALUES (
 );
 ```
 
-`:persona_core_md` 与 `:initial_evolvable_json` 的唯一来源是 [persona-core-v1.md](./persona-core-v1.md)，seed 脚本必须从该文件标记区读取内容，不得在代码中维护第二份副本。
+`:persona_core_md` 与 `:initial_evolvable_json` 的唯一来源是 [persona-core.md](./persona-core.md)，seed 脚本必须从该文件标记区读取内容，不得在代码中维护第二份副本。
 
 `persona_core_hash` 计算：
 
@@ -1412,8 +1412,8 @@ persona_versions → personaVersions
 必须验证：
 
 - 首次初始化创建默认 Agent；
-- 只创建 persona version 1；
-- `persona_core_md` 与 [persona-core-v1.md](./persona-core-v1.md) 标记区内容一致；
+- 只创建初始 persona 版本（当前 seed 写入版本号 2）；
+- `persona_core_md` 与 [persona-core.md](./persona-core.md) 标记区内容一致；
 - 默认设置存在；
 - 重复执行初始化不会插入重复数据；
 - 默认 Agent 状态为：
@@ -1439,7 +1439,7 @@ tag = neutral
 
 ## 14.1 未来 `memories` 表要点
 
-> 完整字段设计（含 memory_pad / arousal / half_life 等情感字段）见 [memory-emotion-design.md](./memory-emotion-design.md) §3。
+> 完整字段设计（含 memory_pad / arousal / half_life 等情感字段）见 [archive/memory-emotion-design.md](./archive/memory-emotion-design.md) §3。
 
 Phase 2 设计时至少需要：
 

@@ -13,7 +13,7 @@ import { proposePersona } from '../service';
 import type { PersonaCompleteFn } from '../llm';
 
 const migrationsFolder = path.resolve(import.meta.dirname, '../../../drizzle');
-const T0 = '2026-11-16T12:00:00.000Z';
+const T0 = new Date().toISOString();
 
 let proposalId: string;
 
@@ -87,7 +87,7 @@ describe('persona route (P3)', () => {
   it('POST /persona/proposals/:id/approve creates version 2 (200)', async () => {
     const seed = await proposePersona(
       getDb(),
-      { agentId: DEFAULT_AGENT_ID, requestText: '简洁一点', now: '2026-11-16T14:00:00.000Z' },
+      { agentId: DEFAULT_AGENT_ID, requestText: '简洁一点', now: new Date(Date.now() + 121 * 60000).toISOString() },
       (async () => JSON.stringify({ patch: { verbosity: 'concise' } })) as PersonaCompleteFn,
     );
     const res = await post(`/persona/proposals/${seed.id}/approve`);
@@ -102,7 +102,7 @@ describe('persona route (P3)', () => {
     void proposalId;
     const seed = await proposePersona(
       getDb(),
-      { agentId: DEFAULT_AGENT_ID, requestText: 'x', now: '2026-11-16T16:00:00.000Z' },
+      { agentId: DEFAULT_AGENT_ID, requestText: 'x', now: new Date(Date.now() + 242 * 60000).toISOString() },
       (async () => JSON.stringify({ patch: { humor: 0.4 } })) as PersonaCompleteFn,
     );
     await post(`/persona/proposals/${seed.id}/approve`);

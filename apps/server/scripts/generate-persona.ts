@@ -2,25 +2,25 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import {
   extractPersonaSeedSource,
-  PERSONA_CORE_V2_BEGIN,
-  PERSONA_CORE_V2_END,
+  PERSONA_CORE_BEGIN,
+  PERSONA_CORE_END,
 } from '../src/db/persona-source';
 
 // scripts -> apps/server 为上一级，仓库根为上三级
 const repoRoot = path.resolve(import.meta.dirname, '../../..');
-const sourcePath = path.join(repoRoot, 'docs', 'persona-core-v2.md');
+const sourcePath = path.join(repoRoot, 'docs', 'persona-core.md');
 const outPath = path.resolve(
   import.meta.dirname,
   '../src/db/generated/persona-core.ts',
 );
 
 const seed = extractPersonaSeedSource(readFileSync(sourcePath, 'utf-8'), {
-  begin: PERSONA_CORE_V2_BEGIN,
-  end: PERSONA_CORE_V2_END,
-  name: 'persona-core-v2.md',
+  begin: PERSONA_CORE_BEGIN,
+  end: PERSONA_CORE_END,
+  name: 'persona-core.md',
 });
 
-const file = `// 由 pnpm gen:persona 自动生成，来源：docs/persona-core-v2.md
+const file = `// 由 pnpm gen:persona 自动生成，来源：docs/persona-core.md
 // （标记区正文 + 初始 evolvable 配置）。请勿手动修改本文件；
 // 调整锚点内容请编辑源文档后重新生成。
 

@@ -1,4 +1,4 @@
-// 由 pnpm gen:persona 自动生成，来源：docs/persona-core-v2.md
+// 由 pnpm gen:persona 自动生成，来源：docs/persona-core.md
 // （标记区正文 + 初始 evolvable 配置）。请勿手动修改本文件；
 // 调整锚点内容请编辑源文档后重新生成。
 

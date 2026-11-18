@@ -1,7 +1,7 @@
 # API 契约文档
 
 项目：本地单用户拟人化聊天 Agent  
-关联文档：[requirements.md](./requirements.md)、[technical-design.md](./technical-design.md)、[database-schema.md](./database-schema.md)  
+关联文档：[database-schema.md](./database-schema.md)；历史设计文档见 [archive/](./archive/)（requirements.md、technical-design.md 等）  
 后端框架：Hono  
 传输协议：HTTP / Streaming  
 版本：v1.3  
@@ -1444,7 +1444,7 @@ DELETE /api/memories
 
 ## 22.2 人格接口（Phase 3 已实现）
 
-设计细节见 [persona-evolution-design.md](./persona-evolution-design.md)。所有端点默认作用于 `DEFAULT_AGENT_ID`，可用 `agentId` 查询参数覆盖。
+设计细节见 [archive/persona-evolution-design.md](./archive/persona-evolution-design.md)。所有端点默认作用于 `DEFAULT_AGENT_ID`，可用 `agentId` 查询参数覆盖。
 
 ### 端点一览
 

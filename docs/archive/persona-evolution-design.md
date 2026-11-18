@@ -3,7 +3,7 @@
 版本：v1.0
 日期：2026-11-17
 状态：已实现（P1–P4 全部完成）
-关联文档：[requirements.md](./requirements.md) F21–F28 / US5、[api-contract.md](./api-contract.md) §22.2、[persona-core-v2.md](./persona-core-v2.md)、[memory-emotion-design.md](./memory-emotion-design.md)
+关联文档：[requirements.md](./requirements.md) F21–F28 / US5、[api-contract.md](./api-contract.md) §22.2、[persona-core.md](./persona-core.md)、[memory-emotion-design.md](./memory-emotion-design.md)
 
 ---
 
@@ -203,4 +203,4 @@ LLM 输出不可解析时返回 `PersonaPatchError`（HTTP 422），绝不猜测
 - P3（`8f89545`）：API 路由 + 抽取 gate + 注入测试；
 - P4（`30a22ed`）：人格面板 UI；
 - 锚点编辑（`16f7f48`）：所有者手动编辑 + 自洽校验；
-- 人格 v2（`3633398`）：十六岁文学少女人设（见 persona-core-v2.md）。
+- 人格 v2（`3633398`）：十六岁文学少女人设（初始人格种子，现为 docs/persona-core.md）。
