@@ -15,6 +15,7 @@ import {
 import { agents, conversations, messages, stateEvents } from '../db/schema';
 import { readAppSettings } from '../settings/service';
 import { computeDisplayState } from '../chat/emotion-decay';
+import { ensureYesterdayDiary, type DiaryGenerateDeps } from '../diary/service';
 
 /** Bootstrap 恢复的消息窗口，见 api-contract.md §7.5。 */
 export const BOOTSTRAP_MESSAGE_LIMIT = 30;
@@ -34,7 +35,12 @@ export class AgentNotFoundError extends Error {
  * - 返回本地设置。
  * route 层只做参数解析与错误映射，不接触 SQL；本层不做 HTTP 概念。
  */
-export function bootstrapAgent(handle: DbHandle, agentRef: string, now: string): BootstrapResponse {
+export function bootstrapAgent(
+  handle: DbHandle,
+  agentRef: string,
+  now: string,
+  diaryDeps?: DiaryGenerateDeps,
+): BootstrapResponse {
   const { db } = handle;
 
   const agent = db
@@ -95,6 +101,10 @@ export function bootstrapAgent(handle: DbHandle, agentRef: string, now: string):
     .orderBy(desc(stateEvents.createdAt), desc(stateEvents.id))
     .get();
 
+  // 日记惰性生成：补写昨天的日记（fire-and-forget；LLM 失败静默，下次 bootstrap 重试）
+  void ensureYesterdayDiary(handle, agent.id, now, diaryDeps).catch((error) => {
+    console.warn('[diary] ensure yesterday diary failed:', error instanceof Error ? error.message : error);
+  });
   return BootstrapResponseSchema.parse({
     user: { id: LOCAL_USER_ID },
     // 读时回归：展示态随时间回归基线，但不写库（§10.11）

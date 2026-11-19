@@ -204,6 +204,7 @@ export const ApiErrorCodeSchema = z.enum([
   'REGENERATE_NOT_APPLICABLE',
   'PLUGIN_NOT_FOUND',
   'SUMMARY_NOT_FOUND',
+  'DIARY_NOT_FOUND',
   'AGENT_NOT_FOUND',
   'CONVERSATION_NOT_FOUND',
   'MEM_NOT_FOUND',
@@ -454,6 +455,45 @@ export const PromptSnapshotClearResponseSchema = z.object({
   count: z.number().int().min(0),
 });
 export type PromptSnapshotClearResponse = z.infer<typeof PromptSnapshotClearResponseSchema>;
+
+// ---------------------------------------------------------------------------
+// 日记（虚拟人内心生活：每日回顾 + 想法沉淀）
+// ---------------------------------------------------------------------------
+
+export const DiaryTypeSchema = z.enum(['daily', 'thought']);
+export type DiaryType = z.infer<typeof DiaryTypeSchema>;
+
+export const DiaryEntryDTOSchema = z.object({
+  id: z.string().min(1),
+  agentId: z.string().min(1),
+  date: z.string().min(1),
+  type: DiaryTypeSchema,
+  content: z.string().min(1),
+  mood: AgentEmotionStateSchema.nullable(),
+  source: z.string().min(1),
+  createdAt: IsoDateTimeSchema,
+  updatedAt: IsoDateTimeSchema,
+});
+export type DiaryEntryDTO = z.infer<typeof DiaryEntryDTOSchema>;
+
+export const DiaryListQuerySchema = z.object({
+  type: DiaryTypeSchema.optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+export type DiaryListQuery = z.infer<typeof DiaryListQuerySchema>;
+
+export const DiaryListResponseSchema = z.object({
+  items: z.array(DiaryEntryDTOSchema),
+  total: z.number().int().min(0),
+});
+export type DiaryListResponse = z.infer<typeof DiaryListResponseSchema>;
+
+export const DiaryDeleteResponseSchema = z.object({
+  ok: z.literal(true),
+  deletedAt: IsoDateTimeSchema,
+});
+export type DiaryDeleteResponse = z.infer<typeof DiaryDeleteResponseSchema>;
 
 /** POST /api/conversations 请求体（手动新建会话） */
 export const ConversationCreateRequestSchema = z.object({
