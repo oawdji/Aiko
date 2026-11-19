@@ -465,7 +465,7 @@ export function ChatView({ bootstrap }: { bootstrap: BootstrapResponse }) {
             关闭
           </button>
         </div>
-        <StatusPanel />
+        <StatusPanel agentId={bootstrap.agent.id} conversationId={session.id} />
         <StatusTimeline agentId={bootstrap.agent.id} />
         <DevChecklist />
         <PromptSnapshotViewer />

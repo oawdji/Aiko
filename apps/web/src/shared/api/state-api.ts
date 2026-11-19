@@ -1,7 +1,9 @@
 import {
+  AgentStateResetResponseSchema,
   StateEventPageQuerySchema,
   StateEventPageResponseSchema,
   type AgentStateEvent,
+  type AgentStateResetResponse,
   type StateEventPageResponse,
 } from '@aiko/shared';
 import { requestJson, type RequestOptions } from './client';
@@ -27,3 +29,16 @@ export function fetchStateEvents(
 }
 
 export type StateTimelineItem = AgentStateEvent;
+
+/** 手动重置情绪回气质基线（写入 manual 状态事件，可追溯）。 */
+export function resetAgentState(
+  agentId: string,
+  conversationId: string,
+  options: RequestOptions = {},
+): Promise<AgentStateResetResponse> {
+  return requestJson(
+    `/agents/${encodeURIComponent(agentId)}/state/reset`,
+    AgentStateResetResponseSchema,
+    { ...options, method: 'POST', body: { conversationId } },
+  );
+}

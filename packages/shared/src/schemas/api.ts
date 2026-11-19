@@ -302,6 +302,21 @@ export const ConversationDetailResponseSchema = z.object({
     .nullable(),
 });
 
+export const AgentStateResetRequestSchema = z.object({
+  conversationId: z.string().min(1),
+});
+export type AgentStateResetRequest = z.infer<typeof AgentStateResetRequestSchema>;
+
+export const AgentStateResetResponseSchema = z.object({
+  ok: z.literal(true),
+  agentId: z.string().min(1),
+  state: AgentEmotionStateSchema,
+  discreteTag: EmotionTagSchema,
+  stateUpdatedAt: IsoDateTimeSchema,
+  event: AgentStateEventSchema,
+});
+export type AgentStateResetResponse = z.infer<typeof AgentStateResetResponseSchema>;
+
 export const AgentStateResponseSchema = z.object({
   agentId: z.string().min(1),
   state: AgentEmotionStateSchema,
