@@ -136,6 +136,7 @@ $env:HF_ENDPOINT = "https://hf-mirror.com"   # PowerShell
 │     ├─ drizzle/              # SQL 迁移（启动时自动执行，幂等）
 │     └─ src/
 │        ├─ api/               # /api/health、/api/dev/mock-chat（仅开发环境）
+│        ├─ plugins/            # 插件挂载点（上下文注入/情绪抽取/记忆检索/主动策略）+ 类型化注册表
 │        ├─ bootstrap/         # 会话恢复服务
 │        ├─ chat/              # 聊天编排 / 情绪抽取与 OU 衰减 / 分层上下文（窗口+摘要）/ 语义记忆接入
 │        ├─ persona/           # 人格演化（提案/diff/确认/回滚）与锚点编辑
@@ -156,6 +157,19 @@ $env:HF_ENDPOINT = "https://hf-mirror.com"   # PowerShell
 │  └─ retrieval/               # SQLite 向量存储 / 对话切片 / 检索组装 / JSON CLI
 ├─ data/                       # 本地 SQLite 数据（不入库）
 └─ docs/                       # 活文档（API 契约 / 数据库 / 人格种子）；历史设计文档在 docs/archive/
+
+## 插件架构（Phase 1）
+
+服务端已提供四个类型化插件挂载点（pps/server/src/plugins/），内置实现以 uiltin.* 插件身份注册，第三方可用同一 egister API 扩展：
+
+| 挂载点 | 接口 | 内置插件 |
+|---|---|---|
+| 上下文注入 | ContextContributor（按 order 排序，失败降级跳过） | 情绪行 / 长期记忆 / 语义记忆 / 会话摘要 |
+| 主动消息策略 | ProactiveStrategyPlugin（按 priority 依次尝试） | 情绪关怀 / 记忆回想 / 好奇提问 |
+| 情绪抽取 | EmotionExtractorPlugin | emotion-llm-v2 |
+| 记忆检索后端 | MemoryRetrieverPlugin | semantic-python / noop |
+
+设计边界：人格内核（锚点 + 风格）、消息持久化、数据导出/删除**不开放插件化**——这是安全底线；插件注入的内容随 debug_mode 进入 Prompt 快照，可审计。
 ```
 
 ## 文档导航

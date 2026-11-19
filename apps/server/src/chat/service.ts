@@ -29,16 +29,14 @@ import {
   isEmotionEngineEnabled,
   type EmotionExtraction,
 } from './emotion-llm';
-import { extractEmotionViaLlm } from './emotion-extract';
 import { computeDisplayState, resolveDecayConfig, revertToBaseline } from './emotion-decay';
-import { buildEmotionPromptLine } from './emotion-prompt';
 import {
-  buildSummaryPromptLine,
-  getRecentWindowOldestCreatedAt,
-  loadInjectableSummaries,
-} from './summary-context';
+  runContextContributors,
+} from '../plugins/context-contributors';
+import { getDefaultEmotionExtractor } from '../plugins/emotion-extractors';
+import { getDefaultMemoryRetriever } from '../plugins/retriever';
 import { loadMemoryConfig } from '../config/memory';
-import { getSharedMemoryClient, type MemoryClient } from './memory-client';
+import type { MemoryClient } from './memory-client';
 import { scheduleFactExtraction } from '../extraction/pipeline';
 import { searchMemories, updateLastAccessed } from '../memories/retrieval';
 import { maybeTriggerSummary, reconsolidateHits, runSummaryTask } from '../memories/lifecycle';
@@ -393,7 +391,7 @@ export async function runChatPipeline(
   const persisted = existing
     ? { messageId: existing.userMessageId, conversationId: body.conversationId, agentId: existing.agentId }
     : persistUserMessage(handle, body, now);
-  const memoryClient = memory === undefined ? getSharedMemoryClient() : memory;
+  const memoryClient = memory === undefined ? getDefaultMemoryRetriever().client() : memory;
   const recent = loadRecentWindow(handle, persisted.conversationId, 30);
 
   // 方案 1：聊天前独立抽取情绪 → 落库状态事件（失败降级不产生事件）
@@ -401,7 +399,7 @@ export async function runChatPipeline(
   let stateEvent: ChatStateEventData | null = null;
   if (isEmotionEngineEnabled() && !existing) {
     try {
-      const extractor = emotionExtractor ?? ((msg, ctx) => extractEmotionViaLlm(handle, msg, ctx));
+      const extractor = emotionExtractor ?? getDefaultEmotionExtractor(handle);
       const raw = await extractor(body.message, recent);
       if (raw) {
         const extraction = buildExtraction(raw.tag as EmotionTag, raw.intensity, raw.reason);
@@ -444,10 +442,13 @@ export async function runChatPipeline(
     extractComplete,
   );
 
-  // Prompt 注入当前情绪（含本轮抽取后的展示态）
+  // Prompt 注入当前情绪（含本轮抽取后的展示态）——事实收集，文本块由插件生成
   const agentRow = handle.db.select().from(agents).where(eq(agents.id, persisted.agentId)).get();
-  const emotionLine = agentRow
-    ? buildEmotionPromptLine(computeDisplayState(agentRow, now), agentRow.currentTag as EmotionTag)
+  const emotionFacts = agentRow
+    ? {
+        display: computeDisplayState(agentRow, now),
+        tag: agentRow.currentTag as EmotionTag,
+      }
     : null;
   // S3c：检索 Top-K active 记忆注入 system（语义 + 情感一致性 + 时间），F18 删除即失效
   const memoryHits = searchMemories(handle, {
@@ -462,52 +463,38 @@ export async function runChatPipeline(
       : null,
     nowIso: now,
   });
-  const memoryLine =
-    memoryHits.length > 0
-      ? '关于用户的长期记忆（自然地运用，不要逐条复述）：\n' +
-        memoryHits.map((m) => '- ' + m.content).join('\n')
-      : null;
-  // 语义检索（bge-base-zh）补充召回历史对话；失败降级不影响对话
-  let memoryBlock = '';
+  // 语义检索（bge-base-zh retriever 插件）补充召回历史对话；失败降级不影响对话
+  let semanticHits: string[] = [];
   if (memoryClient) {
     try {
       const { topK } = loadMemoryConfig();
-      const hits = await memoryClient.search(body.message, topK);
-      if (hits.length > 0) {
-        memoryBlock = `[相关记忆]\n${hits.map((h) => `- ${h}`).join('\n')}\n\n(以上为历史对话记忆,仅供参考,不要主动提及本列表)`;
-      }
+      semanticHits = await memoryClient.search(body.message, topK);
     } catch {
       // 降级约定:检索失败不阻断对话
     }
   }
-  // 分层记忆补全：注入已完全滑出近期窗口的会话摘要（"只写不读"修复）。
-  // 只取 ready 且 end 消息早于窗口最旧消息的摘要，避免与窗口内容重复；
-  // 读取失败降级为不注入，不阻断聊天。
-  let summaryLine: string | null = null;
-  try {
-    const windowOldestCreatedAt = getRecentWindowOldestCreatedAt(
-      handle,
-      persisted.conversationId,
-      30,
-    );
-    const summaries = loadInjectableSummaries(
-      handle,
-      persisted.conversationId,
-      windowOldestCreatedAt,
-    );
-    summaryLine = buildSummaryPromptLine(summaries);
-  } catch {
-    // 降级约定：摘要读取失败不影响对话
-  }  // P1: 注入用户确认的表达风格配置（persona_versions active 版本；读取失败降级为仅锚点）
+
+  // 上下文插件挂载点：情绪行 / 长期记忆 / 语义记忆 / 会话摘要均为内置插件，
+  // 第三方 contributor 按 order 追加；单个失败降级跳过，不阻断聊天。
+  const contributions = await runContextContributors({
+    handle,
+    agentId: persisted.agentId,
+    conversationId: persisted.conversationId,
+    userText: body.message,
+    now,
+    emotion: emotionFacts,
+    memoryHits,
+    semanticHits,
+  });
+
+  // P1: 注入用户确认的表达风格配置（persona_versions active 版本；读取失败降级为仅锚点）。
+  // 人格内核（锚点 + 风格）不开放插件化——这是安全边界。
   const activePersona = getActivePersona(handle, persisted.agentId);
   const systemParts = [PERSONA_CORE_MD];
   if (activePersona) {
     systemParts.push(renderPersonaStyleSection(activePersona.evolvable, activePersona.version));
   }
-  if (emotionLine) systemParts.push(emotionLine);
-  if (memoryLine) systemParts.push(memoryLine);
-  if (memoryBlock) systemParts.push(memoryBlock);
-  if (summaryLine) systemParts.push(summaryLine);
+  systemParts.push(...contributions);
   const prompt = {
     system: systemParts.filter((part) => part.length > 0).join('\n\n'),
     messages: recent,
