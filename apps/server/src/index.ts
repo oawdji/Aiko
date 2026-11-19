@@ -13,6 +13,7 @@ import { dataControlRoute } from './data-control/route';
 import { personaRoute } from './persona/route';
 import { proactiveRoute } from './proactive/route';
 import { pluginsRoute } from './plugins/route';
+import { loadExternalPlugins } from './plugins/loader';
 import { devMockChatRoute } from './api/dev-mock-chat';
 import { loadServerConfig } from './config/server';
 import { loadDbConfig } from './config/db';
@@ -63,6 +64,14 @@ const db = getDb();
 runMigrations(db, dbConfig.migrationsFolder);
 ensureMemorySearchIndex(db);
 seedDefaultData(db, new Date().toISOString());
+try {
+  const loaded = await loadExternalPlugins();
+  if (loaded.length > 0) {
+    console.log(`Plugins loaded: ${loaded.map((p) => p.manifest.id).join(', ')}`);
+  }
+} catch (error) {
+  console.warn(`[warn] plugin loading failed: ${error instanceof Error ? error.message : String(error)}`);
+}
 assertPersonaCoreIntact(db, DEFAULT_AGENT_ID);
 console.log(`Database ready (migrations + seed applied, persona core verified): ${db.databasePath}`);
 

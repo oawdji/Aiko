@@ -96,7 +96,9 @@ describe('事件总线', () => {
 
   it('unsubscribe 后不再接收', async () => {
     const seen: string[] = [];
-    const off = subscribe('summary_ready', (p) => seen.push(p.summaryId));
+    const off = subscribe('summary_ready', (p) => {
+      seen.push(p.summaryId);
+    });
     off();
     await publishEvent('summary_ready', { conversationId: 'c', summaryId: 's1' });
     expect(seen).toEqual([]);
@@ -123,9 +125,15 @@ describe('pipeline 事件发布', () => {
     const stateChanged: string[] = [];
     const completed: string[] = [];
     const offs = [
-      subscribe('message_created', (p) => created.push(p.messageId)),
-      subscribe('state_changed', (p) => stateChanged.push(p.eventId)),
-      subscribe('response_completed', (p) => completed.push(p.messageId)),
+      subscribe('message_created', (p) => {
+        created.push(p.messageId);
+      }),
+      subscribe('state_changed', (p) => {
+        stateChanged.push(p.eventId);
+      }),
+      subscribe('response_completed', (p) => {
+        completed.push(p.messageId);
+      }),
     ];
 
     const pipeline = await runChatPipeline(
@@ -158,8 +166,12 @@ describe('pipeline 事件发布', () => {
     const created: string[] = [];
     const completed: string[] = [];
     const offs = [
-      subscribe('message_created', (p) => created.push(p.messageId)),
-      subscribe('response_completed', (p) => completed.push(p.messageId)),
+      subscribe('message_created', (p) => {
+        created.push(p.messageId);
+      }),
+      subscribe('response_completed', (p) => {
+        completed.push(p.messageId);
+      }),
     ];
 
     const pipeline = await runRegeneratePipeline(

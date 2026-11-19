@@ -20,6 +20,7 @@ import {
   fetchConversation,
   fetchConversationList,
 } from '../shared/api/chat-recovery';
+import { fetchPlugins } from '../shared/api/plugins-api';
 import { fetchSettings } from '../shared/api/settings-api';
 import { MemoryViewer } from '../memories/components/MemoryViewer';
 import { PersonaPanel } from '../persona/components/PersonaPanel';
@@ -134,6 +135,9 @@ export function ChatView({ bootstrap }: { bootstrap: BootstrapResponse }) {
   const [opening, setOpening] = useState(false);
   const [openError, setOpenError] = useState<string | null>(null);
   const [chatStatus, setChatStatus] = useState<ChatStatus>('ready');
+  const [pluginLinks, setPluginLinks] = useState<
+    Array<{ pluginId: string; label: string; url: string }>
+  >([]);
 
   const isBusy = chatStatus === 'submitted' || chatStatus === 'streaming';
 
@@ -161,6 +165,12 @@ export function ChatView({ bootstrap }: { bootstrap: BootstrapResponse }) {
     });
     return () => controller.abort();
   }, [loadHistory]);
+  // 插件声明的前端插槽（工具链接），声明式无代码扩展
+  useEffect(() => {
+    fetchPlugins()
+      .then((data) => setPluginLinks(data.uiLinks ?? []))
+      .catch(() => setPluginLinks([]));
+  }, []);
 
   const refreshHistory = useCallback(() => {
     void loadHistory();
@@ -316,6 +326,7 @@ export function ChatView({ bootstrap }: { bootstrap: BootstrapResponse }) {
           onDelete={handleDeleteConversation}
           onClearAll={handleClearConversations}
           onRetry={refreshHistory}
+          uiLinks={pluginLinks}
           onClose={() => setHistoryOpen(false)}
         />
       </aside>

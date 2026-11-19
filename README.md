@@ -4,7 +4,7 @@
 
 Aiko 是一个运行在本地的对话角色。她不是"带聊天框的工具"，而是一个连续存在的角色：有稳定的人格锚点，有随对话缓慢变化、可解释可追溯的情绪，有跨会话的长期记忆。所有数据保存在本机，对用户完全透明、可修正、可删除。
 
-项目状态：**规划功能已全部完成**（对话 / 情绪 / 记忆 / 人格 / 主动行为），388 个测试全绿，可日常使用。
+项目状态：**规划功能已全部完成**（对话 / 情绪 / 记忆 / 人格 / 主动行为），394 个测试全绿，可日常使用。
 
 ## 功能特性
 
@@ -58,7 +58,7 @@ Aiko 是一个运行在本地的对话角色。她不是"带聊天框的工具"�
 聊天协议：Vercel AI SDK v7（UIMessage Stream，已锁定 ai@7.0.166 / @ai-sdk/react@4.0.170）
 状态管理：自研轻量 store（createStore + useSyncExternalStore，无外部状态库）
 工程：pnpm workspace monorepo
-测试：Vitest（workspace 统一版本，388 个用例全绿）
+测试：Vitest（workspace 统一版本，394 个用例全绿）
 ```
 
 ## 快速启动
@@ -75,7 +75,7 @@ pnpm dev
 pnpm dev:server
 pnpm dev:web
 
-pnpm test          # 全部测试（388 个）
+pnpm test          # 全部测试（394 个）
 pnpm lint          # ESLint
 pnpm gen:persona   # 从 docs/persona-core.md 重新生成新库初始锚点（已有数据库请在面板中编辑）
 ```
@@ -155,6 +155,7 @@ $env:HF_ENDPOINT = "https://hf-mirror.com"   # PowerShell
 ├─ services/
 │  ├─ embedding/               # bge-base-zh embedding 封装（惰性加载，CPU 即可）
 │  └─ retrieval/               # SQLite 向量存储 / 对话切片 / 检索组装 / JSON CLI
+├─ plugins/                    # 外部插件目录（plugin.json 清单，AIKO_PLUGINS_DIR 可覆盖）
 ├─ data/                       # 本地 SQLite 数据（不入库）
 └─ docs/                       # 活文档（API 契约 / 数据库 / 人格种子）；历史设计文档在 docs/archive/
 
@@ -169,7 +170,7 @@ $env:HF_ENDPOINT = "https://hf-mirror.com"   # PowerShell
 | 情绪抽取 | EmotionExtractorPlugin | emotion-llm-v2 |
 | 记忆检索后端 | MemoryRetrieverPlugin | semantic-python / noop |
 
-设计边界：人格内核（锚点 + 风格）、消息持久化、数据导出/删除**不开放插件化**——这是安全底线；插件注入的内容随 debug_mode 进入 Prompt 快照，可审计。`n`n**Phase 2 已完成**：插件支持启用/禁用（`PATCH /api/plugins/:id`，持久化于 `app_settings`，设置面板可视化开关，即时生效）；事件总线（`message_created` / `state_changed` / `summary_ready` / `response_completed`，handler 抛错自动隔离不阻断聊天）。前端插槽与 plugin.json 清单格式为 Phase 3 内容。
+设计边界：人格内核（锚点 + 风格）、消息持久化、数据导出/删除**不开放插件化**——这是安全底线；插件注入的内容随 debug_mode 进入 Prompt 快照，可审计。`n`n**Phase 2 已完成**：插件支持启用/禁用（`PATCH /api/plugins/:id`，持久化于 `app_settings`，设置面板可视化开关，即时生效）；事件总线（`message_created` / `state_changed` / `summary_ready` / `response_completed`，handler 抛错自动隔离不阻断聊天）。**Phase 3 已完成**：插件目录发现（默认 `plugins/`，`AIKO_PLUGINS_DIR` 可覆盖）+ `plugin.json` 清单——支持声明式上下文模板（`{{today}}` 插值）、工具链接前端插槽（侧栏「插件链接」）、以及 ESM 代码入口 `install(api)`（可访问全部注册表与事件订阅）。清单非法或入口失败只跳过该插件，绝不阻断启动。
 ```
 
 ## 文档导航

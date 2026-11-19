@@ -359,8 +359,17 @@ export const PluginInfoSchema = z.object({
 });
 export type PluginInfo = z.infer<typeof PluginInfoSchema>;
 
+export const PluginUiLinkSchema = z.object({
+  pluginId: z.string().min(1),
+  label: z.string().min(1),
+  url: z.string().min(1),
+});
+export type PluginUiLink = z.infer<typeof PluginUiLinkSchema>;
+
 export const PluginListResponseSchema = z.object({
   plugins: z.array(PluginInfoSchema),
+  /** 声明式前端插槽：插件提供的工具链接（禁用插件的链接会被过滤） */
+  uiLinks: z.array(PluginUiLinkSchema).optional(),
 });
 export type PluginListResponse = z.infer<typeof PluginListResponseSchema>;
 

@@ -3,6 +3,7 @@ import type { DbHandle } from '../db/client';
 import { PluginUpdateRequestSchema, type ApiError, type PluginInfo } from '@aiko/shared';
 import { getDb } from '../db';
 import { getDisabledPluginIds, setPluginEnabled } from './persistence';
+import { getLoadedPlugins } from './loader';
 import { contextContributorRegistry } from './context-contributors';
 import { emotionExtractorRegistry } from './emotion-extractors';
 import { memoryRetrieverRegistry } from './retriever';
@@ -64,7 +65,18 @@ function findRegistered(id: string): boolean {
 
 export const pluginsRoute = new Hono()
   .get('/plugins', (c) => {
-    return c.json({ plugins: listPlugins(getDb()) });
+    const handle = getDb();
+    const disabled = new Set(getDisabledPluginIds(handle));
+    const uiLinks = getLoadedPlugins()
+      .filter((p) => !disabled.has(p.manifest.id))
+      .flatMap((p) =>
+        (p.manifest.uiLinks ?? []).map((link) => ({
+          pluginId: p.manifest.id,
+          label: link.label,
+          url: link.url,
+        })),
+      );
+    return c.json({ plugins: listPlugins(handle), uiLinks });
   })
   .patch('/plugins/:id', async (c) => {
     const id = c.req.param('id');

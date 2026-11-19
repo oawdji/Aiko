@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { ConversationListItem } from '@aiko/shared';
+import type { ConversationListItem, PluginUiLink } from '@aiko/shared';
 
 type Props = {
   items: ConversationListItem[];
@@ -12,6 +12,7 @@ type Props = {
   onDelete: (id: string) => void;
   onClearAll: () => void;
   onRetry: () => void;
+  uiLinks: PluginUiLink[];
   onClose?: () => void;
 };
 
@@ -48,6 +49,7 @@ export function HistorySidebar({
   onDelete,
   onClearAll,
   onRetry,
+  uiLinks,
   onClose,
 }: Props) {
   const [deleteArmedId, setDeleteArmedId] = useState<string | null>(null);
@@ -168,6 +170,26 @@ export function HistorySidebar({
           );
         })}
       </div>
+
+      {uiLinks.length > 0 && (
+        <div aria-label="插件工具链接" className="border-t border-neutral-800 px-3 py-2">
+          <h2 className="mb-1 text-xs font-semibold tracking-wide text-neutral-400">插件链接</h2>
+          <ul className="space-y-1">
+            {uiLinks.map((link) => (
+              <li key={link.pluginId + link.url}>
+                <a
+                  href={link.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block truncate rounded px-2 py-1 text-xs text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
+                >
+                  {link.label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </nav>
   );
 }
