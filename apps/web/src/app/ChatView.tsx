@@ -12,6 +12,7 @@ import { MessageList } from '../chat/components/MessageList';
 import { useAgentChat } from '../chat/hooks/use-agent-chat';
 import { extractStateEvents } from '../chat/utils/extract-state-events';
 import { DevChecklist } from './DevChecklist';
+import { PromptSnapshotViewer } from '../status/components/PromptSnapshotViewer';
 import { SettingsDialog } from '../settings/components/SettingsDialog';
 import {
   clearConversations,
@@ -467,6 +468,7 @@ export function ChatView({ bootstrap }: { bootstrap: BootstrapResponse }) {
         <StatusPanel />
         <StatusTimeline agentId={bootstrap.agent.id} />
         <DevChecklist />
+        <PromptSnapshotViewer />
       </aside>
 
       <SettingsDialog

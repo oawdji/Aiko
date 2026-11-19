@@ -14,6 +14,7 @@ import { personaRoute } from './persona/route';
 import { proactiveRoute } from './proactive/route';
 import { pluginsRoute } from './plugins/route';
 import { summariesRoute } from './summaries/route';
+import { promptSnapshotsRoute } from './prompt-snapshots/route';
 import { loadExternalPlugins } from './plugins/loader';
 import { devMockChatRoute } from './api/dev-mock-chat';
 import { loadServerConfig } from './config/server';
@@ -47,6 +48,7 @@ app.route('/api', personaRoute);
 app.route('/api', proactiveRoute);
 app.route('/api', pluginsRoute);
 app.route('/api', summariesRoute);
+app.route('/api', promptSnapshotsRoute);
 // mock 端点仅限开发环境，不随生产构建暴露
 if (process.env.NODE_ENV !== 'production') {
   app.route('/api', devMockChatRoute);

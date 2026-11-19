@@ -403,6 +403,43 @@ export const SummaryDeleteResponseSchema = z.object({
 });
 export type SummaryDeleteResponse = z.infer<typeof SummaryDeleteResponseSchema>;
 
+// ---------------------------------------------------------------------------
+// Prompt 快照（F36 调试模式：查看器 / 审计）
+// ---------------------------------------------------------------------------
+
+export const PromptSnapshotDTOSchema = z.object({
+  id: z.string().min(1),
+  conversationId: z.string().min(1),
+  agentId: z.string().min(1),
+  userMessageId: z.string().nullable(),
+  systemText: z.string(),
+  memoryIds: z.array(z.string()),
+  recentWindowCount: z.number().int().min(0),
+  personaVersion: z.number().int().nullable(),
+  createdAt: IsoDateTimeSchema,
+});
+export type PromptSnapshotDTO = z.infer<typeof PromptSnapshotDTOSchema>;
+
+export const PromptSnapshotListQuerySchema = z.object({
+  conversationId: z.string().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+export type PromptSnapshotListQuery = z.infer<typeof PromptSnapshotListQuerySchema>;
+
+export const PromptSnapshotListResponseSchema = z.object({
+  items: z.array(PromptSnapshotDTOSchema),
+  total: z.number().int().min(0),
+});
+export type PromptSnapshotListResponse = z.infer<typeof PromptSnapshotListResponseSchema>;
+
+export const PromptSnapshotClearResponseSchema = z.object({
+  ok: z.literal(true),
+  clearedAt: IsoDateTimeSchema,
+  count: z.number().int().min(0),
+});
+export type PromptSnapshotClearResponse = z.infer<typeof PromptSnapshotClearResponseSchema>;
+
 /** POST /api/conversations 请求体（手动新建会话） */
 export const ConversationCreateRequestSchema = z.object({
   agentId: z.string().min(1),
