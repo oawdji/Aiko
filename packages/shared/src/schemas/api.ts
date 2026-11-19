@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { AgentEmotionStateSchema } from './emotion';
+import { ConversationSummaryDTOSchema } from './memory';
 
 // ---------------------------------------------------------------------------
 // 基础枚举与标量
@@ -202,6 +203,7 @@ export const ApiErrorCodeSchema = z.enum([
   'INVALID_REQUEST',
   'REGENERATE_NOT_APPLICABLE',
   'PLUGIN_NOT_FOUND',
+  'SUMMARY_NOT_FOUND',
   'AGENT_NOT_FOUND',
   'CONVERSATION_NOT_FOUND',
   'MEM_NOT_FOUND',
@@ -377,6 +379,29 @@ export const PluginUpdateRequestSchema = z.object({
   enabled: z.boolean(),
 });
 export type PluginUpdateRequest = z.infer<typeof PluginUpdateRequestSchema>;
+
+// ---------------------------------------------------------------------------
+// 会话摘要（透明性：摘要对用户可见可删除）
+// ---------------------------------------------------------------------------
+
+export const SummaryListQuerySchema = z.object({
+  conversationId: z.string().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+export type SummaryListQuery = z.infer<typeof SummaryListQuerySchema>;
+
+export const SummaryListResponseSchema = z.object({
+  items: z.array(ConversationSummaryDTOSchema),
+  total: z.number().int().min(0),
+});
+export type SummaryListResponse = z.infer<typeof SummaryListResponseSchema>;
+
+export const SummaryDeleteResponseSchema = z.object({
+  ok: z.literal(true),
+  deletedAt: IsoDateTimeSchema,
+});
+export type SummaryDeleteResponse = z.infer<typeof SummaryDeleteResponseSchema>;
 
 /** POST /api/conversations 请求体（手动新建会话） */
 export const ConversationCreateRequestSchema = z.object({

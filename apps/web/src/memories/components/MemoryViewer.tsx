@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { MemoryFactDTO, MemoryStatus, MemoryType } from '@aiko/shared';
+import type { ConversationSummaryDTO, MemoryFactDTO, MemoryStatus, MemoryType } from '@aiko/shared';
 import {
   clearMemories,
   confirmMemory,
@@ -9,6 +9,7 @@ import {
   rejectMemory,
   restoreMemory,
 } from '../../shared/api/memories-api';
+import { deleteSummary, fetchSummaries } from '../../shared/api/summaries-api';
 
 /**
  * 记忆查看器（F17，memory-emotion-design.md §7.2）：
@@ -55,6 +56,7 @@ export function MemoryViewer({ open, onClose }: { open: boolean; onClose: () => 
   const [clearArmed, setClearArmed] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [view, setView] = useState<'memories' | 'summaries'>('memories');
 
   // 搜索防抖：输入停顿 300ms 后才触发服务端查询
   useEffect(() => {
@@ -173,6 +175,39 @@ export function MemoryViewer({ open, onClose }: { open: boolean; onClose: () => 
           </button>
         </header>
 
+        <div className="mb-2 flex gap-1 text-xs" role="tablist" aria-label="查看器分区">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={view === 'memories'}
+            onClick={() => setView('memories')}
+            className={
+              view === 'memories'
+                ? 'rounded border border-neutral-600 bg-neutral-800 px-3 py-1 text-neutral-100'
+                : 'rounded border border-neutral-800 px-3 py-1 text-neutral-400 hover:bg-neutral-800'
+            }
+          >
+            记忆
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={view === 'summaries'}
+            onClick={() => setView('summaries')}
+            className={
+              view === 'summaries'
+                ? 'rounded border border-neutral-600 bg-neutral-800 px-3 py-1 text-neutral-100'
+                : 'rounded border border-neutral-800 px-3 py-1 text-neutral-400 hover:bg-neutral-800'
+            }
+          >
+            会话摘要
+          </button>
+        </div>
+
+        {view === 'summaries' ? (
+          <SummariesView />
+        ) : (
+        <>
         <div className="mb-2 flex gap-2 text-xs">
           <select
             aria-label="按状态筛选"
@@ -446,11 +481,145 @@ export function MemoryViewer({ open, onClose }: { open: boolean; onClose: () => 
             )}
           </>
         )}
+        </>
+        )}
 
         <p className="mt-3 text-[10px] text-neutral-600">
-          注意：记忆内容会发送给所配置的 LLM 服务用于对话。
+          注意：记忆与摘要内容会发送给所配置的 LLM 服务用于对话。
         </p>
       </aside>
+    </div>
+  );
+}
+
+/**
+ * 会话摘要分区（透明性：她记得的阶段性回顾对用户可见、可删除）。
+ * 挂载时加载；删除为两步确认 + 乐观移除；查看 = 展开/收起全文。
+ */
+function SummariesView() {
+  const [items, setItems] = useState<ConversationSummaryDTO[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [armedId, setArmedId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setItems((await fetchSummaries()).items);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '加载失败');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const handleDelete = (s: ConversationSummaryDTO) => {
+    if (armedId !== s.id) {
+      setArmedId(s.id);
+      return;
+    }
+    setArmedId(null);
+    const prev = items;
+    setItems((list) => list.filter((x) => x.id !== s.id));
+    deleteSummary(s.id).catch(() => {
+      setItems(prev);
+      setError('删除失败');
+    });
+  };
+
+  if (loading && items.length === 0) {
+    return (
+      <div className="flex flex-1 items-center justify-center text-sm text-neutral-500">
+        加载中…
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="mb-3 flex items-center gap-2 text-xs">
+        <span className="text-neutral-500">共 {items.length} 条</span>
+        <button
+          type="button"
+          onClick={() => void load()}
+          className="ml-auto rounded border border-neutral-700 px-2 py-1 text-neutral-300 hover:bg-neutral-800"
+        >
+          刷新
+        </button>
+      </div>
+
+      {error && (
+        <p role="alert" className="mb-2 rounded border border-red-900 bg-red-950 px-2 py-1 text-xs text-red-300">
+          {error}
+        </p>
+      )}
+
+      {items.length === 0 ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center">
+          <span className="text-2xl">📝</span>
+          <p className="text-sm text-neutral-400">暂无会话摘要</p>
+          <p className="max-w-64 text-xs text-neutral-600">
+            每累计 30 条消息会自动生成一份阶段性回顾，帮助你了解她记得哪些对话脉络。
+          </p>
+        </div>
+      ) : (
+        <ul className="flex-1 space-y-2 overflow-y-auto pr-1">
+          {items.map((s) => (
+            <li key={s.id} className="rounded border border-neutral-800 bg-neutral-800/60 p-3">
+              <button
+                type="button"
+                onClick={() => setExpandedId(expandedId === s.id ? null : s.id)}
+                className="w-full text-left"
+                aria-expanded={expandedId === s.id}
+              >
+                <p className="text-xs text-neutral-500">
+                  {new Date(s.createdAt).toLocaleString()} · {s.conversationId}
+                </p>
+                <p
+                  className={
+                    expandedId === s.id
+                      ? 'mt-1 whitespace-pre-wrap text-sm text-neutral-100'
+                      : 'mt-1 line-clamp-2 text-sm text-neutral-300'
+                  }
+                >
+                  {s.content}
+                </p>
+              </button>
+              <div className="mt-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setExpandedId(expandedId === s.id ? null : s.id)}
+                  className="rounded border border-neutral-600 px-2 py-0.5 text-xs text-neutral-300 hover:bg-neutral-800"
+                >
+                  {expandedId === s.id ? '收起' : '查看全文'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDelete(s)}
+                  aria-label={armedId === s.id ? '确认删除该摘要' : '删除该摘要'}
+                  className={
+                    armedId === s.id
+                      ? 'rounded border border-red-600 bg-red-950 px-2 py-0.5 text-xs text-red-300 hover:bg-red-900'
+                      : 'rounded border border-red-900 px-2 py-0.5 text-xs text-red-400 hover:bg-red-950'
+                  }
+                >
+                  {armedId === s.id ? '确认删除？' : '删除'}
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <p className="mt-3 text-[10px] text-neutral-600">
+        摘要会在对话时自动注入她的记忆；删除后不再注入，但已生成的记忆事实不受影响。
+      </p>
     </div>
   );
 }
