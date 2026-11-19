@@ -84,7 +84,7 @@ describe('persona route (P3)', () => {
     expect(body.status).toBe('rejected');
   });
 
-  it('POST /persona/proposals/:id/approve creates version 2 (200)', async () => {
+  it('POST /persona/proposals/:id/approve creates a new version (200)', async () => {
     const seed = await proposePersona(
       getDb(),
       { agentId: DEFAULT_AGENT_ID, requestText: '简洁一点', now: new Date(Date.now() + 121 * 60000).toISOString() },
@@ -94,7 +94,7 @@ describe('persona route (P3)', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { code: string; status: string; ok: boolean; version: number; evolvable: { verbosity: string }; proposals: unknown[]; versions: { version: number }[] };
     expect(body.ok).toBe(true);
-    expect(body.version).toBe(3);
+    expect(body.version).toBe(4);
     expect(body.evolvable.verbosity).toBe('concise');
   });
 
@@ -103,7 +103,7 @@ describe('persona route (P3)', () => {
     const seed = await proposePersona(
       getDb(),
       { agentId: DEFAULT_AGENT_ID, requestText: 'x', now: new Date(Date.now() + 242 * 60000).toISOString() },
-      (async () => JSON.stringify({ patch: { humor: 0.4 } })) as PersonaCompleteFn,
+      (async () => JSON.stringify({ patch: { humor: 0.45 } })) as PersonaCompleteFn,
     );
     await post(`/persona/proposals/${seed.id}/approve`);
     const res = await post(`/persona/proposals/${seed.id}/approve`);
@@ -131,11 +131,11 @@ describe('persona route (P3)', () => {
     const res = await personaRoute.request('/persona/versions');
     expect(res.status).toBe(200);
     const body = (await res.json()) as { code: string; status: string; ok: boolean; version: number; evolvable: { verbosity: string }; proposals: unknown[]; versions: { version: number }[] };
-    expect(body.versions[0]!.version).toBeGreaterThan(2);
+    expect(body.versions[0]!.version).toBeGreaterThan(3);
   });
 
-  it('POST /persona/versions/1/rollback creates a new version (200)', async () => {
-    const res = await post('/persona/versions/2/rollback');
+  it('POST /persona/versions/:id/rollback creates a new version (200)', async () => {
+    const res = await post('/persona/versions/3/rollback');
     expect(res.status).toBe(200);
     const body = (await res.json()) as { code: string; status: string; ok: boolean; version: number; evolvable: { verbosity: string }; proposals: unknown[]; versions: { version: number }[] };
     expect(body.ok).toBe(true);

@@ -1412,7 +1412,7 @@ persona_versions → personaVersions
 必须验证：
 
 - 首次初始化创建默认 Agent；
-- 只创建初始 persona 版本（当前 seed 写入版本号 2）；
+- 只创建初始 persona 版本（当前 seed 写入版本号 3）；
 - `persona_core_md` 与 [persona-core.md](./persona-core.md) 标记区内容一致；
 - 默认设置存在；
 - 重复执行初始化不会插入重复数据；

@@ -180,7 +180,7 @@ $env:HF_ENDPOINT = "https://hf-mirror.com"   # PowerShell
 |---|---|
 | [docs/api-contract.md](docs/api-contract.md) | API 契约：接口定义、错误码、流式协议、幂等策略、实测记录 |
 | [docs/database-schema.md](docs/database-schema.md) | 数据库设计：SQLite 表结构、约束、迁移与事务 |
-| [docs/persona-core.md](docs/persona-core.md) | 人格锚点初始种子（人格可在人格面板自定义编辑，版本化存于数据库） |
+| [docs/persona-core.md](docs/persona-core.md) | 人格锚点初始种子 v3（古灵精怪、会做梦会无聊会害怕的人物画像；可在面板自定义编辑，版本化存于数据库） |
 
 > 历史设计文档（需求、技术设计、React 架构、记忆/情绪设计等）已归档至 [docs/archive/](docs/archive/)，仅供查阅，不再随功能更新维护。
 
