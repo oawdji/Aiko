@@ -10,6 +10,7 @@ import type { DbHandle } from '../db/client';
 import type { PromptMessage } from '../chat/recent-window';
 import { extractEmotionViaLlm } from '../chat/emotion-extract';
 import { createRegistry, type PluginDescriptor } from './registry';
+import { getDisabledPluginIds } from './persistence';
 
 export type EmotionExtractionResult = {
   tag: string;
@@ -39,7 +40,8 @@ emotionExtractorRegistry.register({
 
 /** 默认抽取器 = 注册表第一个插件（内置注册顺序即优先级）。 */
 export function getDefaultEmotionExtractor(handle: DbHandle): EmotionExtractorFn {
-  const first = emotionExtractorRegistry.all()[0];
+  const disabled = new Set(getDisabledPluginIds(handle));
+  const first = emotionExtractorRegistry.all().find((p) => !disabled.has(p.id));
   if (!first) {
     throw new Error('no emotion extractor plugin registered');
   }

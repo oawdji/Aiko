@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type {
   LlmConnectionTestResponse,
+  PluginInfo,
   ProactiveSettings,
   SettingsResponse,
 } from '@aiko/shared';
@@ -11,12 +12,20 @@ import {
   testLlmConnection,
   updateSettings,
 } from '../../shared/api/settings-api';
+import { fetchPlugins, updatePlugin } from '../../shared/api/plugins-api';
 
 type Props = {
   open: boolean;
   settings: SettingsResponse | null;
   onSaved: (response: SettingsResponse) => void;
   onClose: () => void;
+};
+
+const MOUNT_POINT_LABEL: Record<string, string> = {
+  'context-contributor': '上下文注入',
+  'proactive-strategy': '主动策略',
+  'emotion-extractor': '情绪抽取',
+  'memory-retriever': '记忆检索',
 };
 
 function errorMessage(error: unknown): string {
@@ -41,6 +50,7 @@ export function SettingsDialog({ open, settings, onSaved, onClose }: Props) {
   const [notice, setNotice] = useState<string | null>(null);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<LlmConnectionTestResponse | null>(null);
+  const [plugins, setPlugins] = useState<PluginInfo[]>([]);
   const [proactive, setProactive] = useState<ProactiveSettings>({
     enabled: false,
     idleMinutes: 30,
@@ -59,6 +69,9 @@ export function SettingsDialog({ open, settings, onSaved, onClose }: Props) {
     fetchSettings()
       .then(onSaved)
       .catch(() => undefined);
+    fetchPlugins()
+      .then((r) => setPlugins(r.plugins))
+      .catch(() => setPlugins([]));
     // （依赖仅 open：设置刷新由 onSaved 回写 props）
   }, [open]);
 
@@ -122,6 +135,16 @@ export function SettingsDialog({ open, settings, onSaved, onClose }: Props) {
     }
   };
 
+  const handleTogglePlugin = (id: string, enabled: boolean) => {
+    setPlugins((list) => list.map((p) => (p.id === id ? { ...p, enabled } : p)));
+    updatePlugin(id, enabled)
+      .then((r) => setPlugins(r.plugins))
+      .catch(() => {
+        setPlugins((list) => list.map((p) => (p.id === id ? { ...p, enabled: !enabled } : p)));
+        setErrorText('插件状态保存失败');
+      });
+  };
+
   return (
     <div
       aria-label="LLM 设置"
@@ -178,6 +201,37 @@ export function SettingsDialog({ open, settings, onSaved, onClose }: Props) {
                 尚未验证——完成一轮对话后自动确认。未安装 Python 语义服务时自动降级为 FTS5 关键词检索。
               </p>
             )}
+          </section>
+        )}
+
+        {plugins.length > 0 && (
+          <section aria-label="插件" className="space-y-2 rounded-lg border border-neutral-800 p-3">
+            <h3 className="text-sm font-semibold text-neutral-300">插件</h3>
+            <p className="text-[10px] text-neutral-600">禁用即时生效（禁用后对应功能块不再注入，聊天不受影响）。</p>
+            <ul className="space-y-1.5">
+              {plugins.map((plugin) => (
+                <li key={plugin.id} className="flex items-start justify-between gap-2 rounded bg-neutral-950/60 px-2 py-1.5">
+                  <div className="min-w-0">
+                    <p className="truncate text-xs text-neutral-200">{plugin.id}</p>
+                    {plugin.description && (
+                      <p className="truncate text-[10px] text-neutral-500">{plugin.description}</p>
+                    )}
+                    <p className="text-[10px] text-neutral-600">
+                      {MOUNT_POINT_LABEL[plugin.mountPoint] ?? plugin.mountPoint}
+                    </p>
+                  </div>
+                  <label className="flex shrink-0 cursor-pointer items-center gap-1 text-[10px] text-neutral-400">
+                    <input
+                      type="checkbox"
+                      checked={plugin.enabled}
+                      onChange={(e) => handleTogglePlugin(plugin.id, e.target.checked)}
+                      className="accent-sky-500"
+                    />
+                    {plugin.enabled ? '启用' : '禁用'}
+                  </label>
+                </li>
+              ))}
+            </ul>
           </section>
         )}
 

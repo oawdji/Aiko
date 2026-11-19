@@ -33,6 +33,7 @@ import { computeDisplayState, resolveDecayConfig, revertToBaseline } from './emo
 import {
   runContextContributors,
 } from '../plugins/context-contributors';
+import { publishEvent } from '../plugins/event-bus';
 import { getDefaultEmotionExtractor } from '../plugins/emotion-extractors';
 import { getDefaultMemoryRetriever } from '../plugins/retriever';
 import { loadMemoryConfig } from '../config/memory';
@@ -320,11 +321,12 @@ function writeAssistantMessage(
     content: string;
     errorCode: string | null;
   },
-): void {
+): string {
+  const messageId = `msg_${randomUUID()}`;
   handle.db
     .insert(messages)
     .values({
-      id: `msg_${randomUUID()}`,
+      id: messageId,
       conversationId: params.conversationId,
       agentId: params.agentId,
       userId: LOCAL_USER_ID,
@@ -338,6 +340,7 @@ function writeAssistantMessage(
       updatedAt: params.now,
     })
     .run();
+  return messageId;
 }
 
 /**
@@ -391,7 +394,17 @@ export async function runChatPipeline(
   const persisted = existing
     ? { messageId: existing.userMessageId, conversationId: body.conversationId, agentId: existing.agentId }
     : persistUserMessage(handle, body, now);
-  const memoryClient = memory === undefined ? getDefaultMemoryRetriever().client() : memory;
+  if (!existing) {
+    void publishEvent('message_created', {
+      conversationId: persisted.conversationId,
+      agentId: persisted.agentId,
+      messageId: persisted.messageId,
+      role: 'user',
+      content: body.message,
+    });
+  }
+  const memoryClient =
+    memory === undefined ? getDefaultMemoryRetriever(handle).client() : memory;
   const recent = loadRecentWindow(handle, persisted.conversationId, 30);
 
   // 方案 1：聊天前独立抽取情绪 → 落库状态事件（失败降级不产生事件）
@@ -409,6 +422,15 @@ export async function runChatPipeline(
           triggerMessageId: persisted.messageId,
           extraction,
           now,
+        });
+        void publishEvent('state_changed', {
+          agentId: persisted.agentId,
+          conversationId: persisted.conversationId,
+          eventId: stateEvent.id,
+          tag: stateEvent.discreteTag,
+          valence: stateEvent.after.valence,
+          arousal: stateEvent.after.arousal,
+          dominance: stateEvent.after.dominance,
         });
       }
     } catch {
@@ -501,13 +523,25 @@ export async function runChatPipeline(
   };
 
   // 再巩固入口：命中即刷新 last_accessed_at（S4 formalize；随抽取 promise 一起被测试等待）
-  const memoryAccess = Promise.resolve().then(() => {
+  const memoryAccess = Promise.resolve().then(async () => {
     if (existing) return undefined; // 重新生成不改变记忆命中统计与摘要触发
     updateLastAccessed(handle, memoryHits.map((m) => m.id), now);
     reconsolidateHits(handle, memoryHits.map((m) => m.id), now);
     const summary = maybeTriggerSummary(handle, persisted.conversationId, persisted.agentId, now);
     if (summary.triggered && extractComplete) {
-      return runSummaryTask(handle, summary.summaryId!, extractComplete, new Date().toISOString());
+      const status = await runSummaryTask(
+        handle,
+        summary.summaryId!,
+        extractComplete,
+        new Date().toISOString(),
+      );
+      if (status === 'ready') {
+        void publishEvent('summary_ready', {
+          conversationId: persisted.conversationId,
+          summaryId: summary.summaryId!,
+        });
+      }
+      return status;
     }
     return undefined;
   });
@@ -602,12 +636,18 @@ export function createChatResponse(
         // text 承诺是权威全文;中途失败(拒绝)时走 failed 分支
         const content = await pipeline.llm.text;
 
-        writeAssistantMessage(handle, {
+        const assistantMessageId = writeAssistantMessage(handle, {
           conversationId: pipeline.conversationId,
           agentId: pipeline.agentId,
           now: new Date().toISOString(),
           content,
           errorCode: null,
+        });
+        void publishEvent('response_completed', {
+          conversationId: pipeline.conversationId,
+          agentId: pipeline.agentId,
+          messageId: assistantMessageId,
+          content,
         });
 
         // T7:本轮对话(用户+助手)写入长期记忆;失败不影响响应流。

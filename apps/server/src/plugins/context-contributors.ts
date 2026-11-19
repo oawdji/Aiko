@@ -21,6 +21,7 @@ import {
 } from '../chat/summary-context';
 import { DEFAULT_MAX_CONTEXT_MESSAGES } from '../chat/recent-window';
 import { createRegistry, type PluginDescriptor } from './registry';
+import { getDisabledPluginIds } from './persistence';
 
 export type ContextEmotionFacts = {
   display: AgentEmotionState;
@@ -109,9 +110,12 @@ contextContributorRegistry.register({
  * 单个失败降级跳过（console.warn + 继续），保证聊天不被插件阻断。
  */
 export async function runContextContributors(facts: ContextFacts): Promise<string[]> {
-  const sorted = [...contextContributorRegistry.all()].sort(
-    (a, b) => a.order - b.order || a.id.localeCompare(b.id),
-  );
+  const disabled = new Set(getDisabledPluginIds(facts.handle));
+  const sorted = [...contextContributorRegistry.all()]
+    .filter((p) => !disabled.has(p.id))
+    .sort(
+      (a, b) => a.order - b.order || a.id.localeCompare(b.id),
+    );
   const out: string[] = [];
   for (const contributor of sorted) {
     try {

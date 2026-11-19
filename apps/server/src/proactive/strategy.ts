@@ -7,6 +7,7 @@ import {
   hasEmotionCareSince,
 } from './repository';
 import { createRegistry, type PluginDescriptor } from '../plugins/registry';
+import { getDisabledPluginIds } from '../plugins/persistence';
 
 export type StrategyPick = {
   strategy: ProactiveStrategy;
@@ -122,9 +123,12 @@ export function pickStrategy(
   conversationId: string,
   nowMs: number,
 ): StrategyPick | null {
-  const sorted = [...proactiveStrategyRegistry.all()].sort(
-    (a, b) => a.priority - b.priority || a.id.localeCompare(b.id),
-  );
+  const disabled = new Set(getDisabledPluginIds(handle));
+  const sorted = [...proactiveStrategyRegistry.all()]
+    .filter((p) => !disabled.has(p.id))
+    .sort(
+      (a, b) => a.priority - b.priority || a.id.localeCompare(b.id),
+    );
   for (const strategy of sorted) {
     const pick = strategy.pick({ handle, agentId, conversationId, nowMs });
     if (pick) return pick;

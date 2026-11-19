@@ -11,7 +11,9 @@ import {
   noopMemoryClient,
   type MemoryClient,
 } from '../chat/memory-client';
+import type { DbHandle } from '../db/client';
 import { createRegistry, type PluginDescriptor } from './registry';
+import { getDisabledPluginIds } from './persistence';
 
 export type MemoryRetrieverPlugin = PluginDescriptor & {
   client(): MemoryClient;
@@ -31,9 +33,10 @@ memoryRetrieverRegistry.register({
   client: () => noopMemoryClient,
 });
 
-/** 默认检索器 = 注册表第一个插件。 */
-export function getDefaultMemoryRetriever(): MemoryRetrieverPlugin {
-  const first = memoryRetrieverRegistry.all()[0];
+/** 默认检索器 = 注册表第一个未禁用插件（handle 缺省时不过滤）。 */
+export function getDefaultMemoryRetriever(handle?: DbHandle): MemoryRetrieverPlugin {
+  const disabled = new Set(handle ? getDisabledPluginIds(handle) : []);
+  const first = memoryRetrieverRegistry.all().find((p) => !disabled.has(p.id));
   if (!first) {
     throw new Error('no memory retriever plugin registered');
   }

@@ -201,6 +201,7 @@ export const UpdateSettingsRequestBodySchema = z
 export const ApiErrorCodeSchema = z.enum([
   'INVALID_REQUEST',
   'REGENERATE_NOT_APPLICABLE',
+  'PLUGIN_NOT_FOUND',
   'AGENT_NOT_FOUND',
   'CONVERSATION_NOT_FOUND',
   'MEM_NOT_FOUND',
@@ -333,6 +334,40 @@ export const LlmConnectionTestResponseSchema = z.object({
   latencyMs: z.number().min(0),
   errorCode: z.string().min(1).nullable(),
 });
+
+// ---------------------------------------------------------------------------
+// 插件（Phase 2：清单 / 启停）
+// ---------------------------------------------------------------------------
+
+export const PluginMountPointSchema = z.enum([
+  'context-contributor',
+  'proactive-strategy',
+  'emotion-extractor',
+  'memory-retriever',
+]);
+export type PluginMountPoint = z.infer<typeof PluginMountPointSchema>;
+
+export const PluginInfoSchema = z.object({
+  id: z.string().min(1),
+  mountPoint: PluginMountPointSchema,
+  description: z.string().nullable(),
+  /** context-contributor 的排序字段 */
+  order: z.number().int().optional(),
+  /** proactive-strategy 的优先级字段 */
+  priority: z.number().int().optional(),
+  enabled: z.boolean(),
+});
+export type PluginInfo = z.infer<typeof PluginInfoSchema>;
+
+export const PluginListResponseSchema = z.object({
+  plugins: z.array(PluginInfoSchema),
+});
+export type PluginListResponse = z.infer<typeof PluginListResponseSchema>;
+
+export const PluginUpdateRequestSchema = z.object({
+  enabled: z.boolean(),
+});
+export type PluginUpdateRequest = z.infer<typeof PluginUpdateRequestSchema>;
 
 /** POST /api/conversations 请求体（手动新建会话） */
 export const ConversationCreateRequestSchema = z.object({
