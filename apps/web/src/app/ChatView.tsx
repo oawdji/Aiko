@@ -24,6 +24,7 @@ import {
 import { fetchPlugins } from '../shared/api/plugins-api';
 import { fetchSettings } from '../shared/api/settings-api';
 import { MemoryViewer } from '../memories/components/MemoryViewer';
+import { DiaryPanel } from '../diary/components/DiaryPanel';
 import { PersonaPanel } from '../persona/components/PersonaPanel';
 import { fetchMemories } from '../shared/api/memories-api';
 import { StatusTimeline } from '../status/components/StatusTimeline';
@@ -266,6 +267,7 @@ export function ChatView({ bootstrap }: { bootstrap: BootstrapResponse }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [panelOpen, historyOpen, settingsOpen]);
   const [memoriesOpen, setMemoriesOpen] = useState(false);
+  const [diaryOpen, setDiaryOpen] = useState(false);
   const [personaOpen, setPersonaOpen] = useState(false);
 
   // 待确认记忆数徽标：挂载时与查看器开关变化后刷新
@@ -368,6 +370,17 @@ export function ChatView({ bootstrap }: { bootstrap: BootstrapResponse }) {
             className="shrink-0 rounded-lg border border-neutral-700 px-3 py-2 text-xs text-neutral-300 hover:bg-neutral-800 lg:hidden"
           >
             状态
+          </button>
+          <button
+            type="button"
+            aria-label="打开日记"
+            onClick={() => {
+              setHistoryOpen(false);
+              setDiaryOpen(true);
+            }}
+            className="shrink-0 rounded-lg border border-neutral-700 px-3 py-2 text-xs text-neutral-300 hover:bg-neutral-800"
+          >
+            📖 日记
           </button>
           <button
             type="button"
@@ -479,6 +492,7 @@ export function ChatView({ bootstrap }: { bootstrap: BootstrapResponse }) {
       />
 
       <MemoryViewer open={memoriesOpen} onClose={() => setMemoriesOpen(false)} />
+      <DiaryPanel open={diaryOpen} onClose={() => setDiaryOpen(false)} />
       <PersonaPanel open={personaOpen} onClose={() => setPersonaOpen(false)} />
     </main>
   );
