@@ -73,7 +73,7 @@ runMigrations(db, dbConfig.migrationsFolder);
 ensureMemorySearchIndex(db);
 seedDefaultData(db, new Date().toISOString());
 try {
-  const loaded = await loadExternalPlugins();
+  const loaded = await loadExternalPlugins(undefined, app);
   if (loaded.length > 0) {
     console.log(`Plugins loaded: ${loaded.map((p) => p.manifest.id).join(', ')}`);
   }

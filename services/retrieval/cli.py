@@ -28,7 +28,16 @@ def main() -> int:
         sys.stdout.reconfigure(encoding="utf-8")
         request = json.loads(sys.stdin.readline())
         retriever = LocalMemoryRetriever()
-        if request.get("op") == "index":
+        if request.get("op") == "index_items":
+            indexed = retriever.index_items(request.get("items", []), kind=request.get("kind", "memory"))
+            print(json.dumps({"ok": True, "indexed": indexed}, ensure_ascii=False))
+        elif request.get("op") == "delete_kind":
+            deleted = retriever.delete_kind(request.get("kind", ""))
+            print(json.dumps({"ok": True, "deleted": deleted}, ensure_ascii=False))
+        elif request.get("op") == "search" and request.get("kind"):
+            hits = retriever.search_in(request.get("query", ""), top_k=int(request.get("top_k", 5)), kind=request.get("kind"))
+            print(json.dumps({"ok": True, "hits": [h["text"] for h in hits]}, ensure_ascii=False))
+        elif request.get("op") == "index":
             indexed = retriever.index_dialogue(request.get("messages", []))
             print(json.dumps({"ok": True, "indexed": indexed}, ensure_ascii=False))
         elif request.get("op") == "search":

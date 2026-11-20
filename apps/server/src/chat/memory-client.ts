@@ -16,6 +16,12 @@ export interface MemoryClient {
   search(query: string, topK: number): Promise<string[]>;
   /** 清空全部对话向量(清空会话时调用)。失败不抛错。 */
   clearVectors(): Promise<void>;
+  /** 向指定 collection(kind) 入库普通文本块(书架等附加集合)。失败不抛错。可选:旧客户端无此方法。 */
+  indexItems?(collection: string, items: { id: string; text: string }[]): Promise<void>;
+  /** 在指定 collection 内检索。失败返回空数组。可选:旧客户端无此方法。 */
+  searchIn?(collection: string, query: string, topK: number): Promise<string[]>;
+  /** 删除整个 collection(如删除一本书)。失败不抛错。可选:旧客户端无此方法。 */
+  removeCollection?(collection: string): Promise<void>;
 }
 
 export const noopMemoryClient: MemoryClient = {
@@ -24,6 +30,11 @@ export const noopMemoryClient: MemoryClient = {
     return [];
   },
   async clearVectors() {},
+  async indexItems() {},
+  async searchIn() {
+    return [];
+  },
+  async removeCollection() {},
 };
 
 export type CliResult = { ok: true; hits?: string[] } | { ok: false; error: string };
@@ -88,6 +99,21 @@ export function createPythonMemoryClient(options?: {
   };
 
   return {
+    async indexItems(collection, items) {
+      if (items.length === 0) return;
+      await call({
+        op: 'index_items',
+        kind: collection,
+        items: items.map((i) => ({ text: i.text })),
+      });
+    },
+    async searchIn(collection, query, topK) {
+      const result = await call({ op: 'search', query, top_k: topK, kind: collection });
+      return result && result.ok ? (result.hits ?? []) : [];
+    },
+    async removeCollection(collection) {
+      await call({ op: 'delete_kind', kind: collection });
+    },
     async indexDialogue(messages) {
       if (messages.length === 0) return;
       await call({ op: 'index', messages });

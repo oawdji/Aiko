@@ -148,6 +148,52 @@ class LocalMemoryRetriever:
 
     # ---- 清空 --------------------------------------------------------------
 
+    def index_items(self, items: Sequence[dict], kind: str = 'memory') -> int:
+        """\u4fbf\u6377\u65b9\u6cd5\uff1a\u666e\u901a\u6587\u672c\u5757\u5165\u5e93\uff08\u4e0d\u5207\u7247\uff0c\u7528\u4e8e\u4e66\u67b6\u7b49\u9644\u52a0\u96c6\u5408\uff09\u3002items = [{text, ...}]"""
+        if not items:
+            return 0
+        now = datetime.now(timezone.utc).isoformat()
+        texts = [i['text'] for i in items]
+        metadatas = [
+            {
+                'timestamp': i.get('timestamp') or now,
+                'source': i.get('source') or kind,
+                'kind': kind,
+            }
+            for i in items
+        ]
+        self.index(texts, metadatas)
+        return len(items)
+
+    def search_in(self, query: str, top_k: int = 5, kind: str = 'memory') -> list[dict]:
+        """\u5728\u6307\u5b9a collection(kind) \u5185\u68c0\u7d22\u3002"""
+        k = top_k or self.default_top_k
+        try:
+            if not query or not query.strip():
+                return []
+            embedder = self._ensure_embedder()
+            query_vec = embedder.embed([query.strip()])
+            hits = self._store.search(query_vec[0], top_k=k * 3, kind=kind)
+            return [
+                {
+                    'text': h.text,
+                    'score': float(h.score),
+                    'metadata': {'timestamp': h.timestamp, 'source': h.source, 'kind': kind},
+                }
+                for h in hits[:k]
+            ]
+        except Exception:
+            logger.exception('search_in failed, degrading to empty result')
+            return []
+
+    def delete_kind(self, kind: str) -> int:
+        """\u5220\u9664\u6307\u5b9a collection\u5168\u90e8\u5411\u91cf\u3002"""
+        try:
+            return self._store.delete_kind(kind)
+        except Exception:
+            logger.exception('delete_kind failed')
+            return 0
+
     def clear(self) -> int:
         """清空全部向量数据（清空对话时调用；不涉及主库 memories 表）。"""
         return self._store.clear()

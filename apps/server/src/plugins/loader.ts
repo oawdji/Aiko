@@ -18,6 +18,12 @@ import { emotionExtractorRegistry } from './emotion-extractors';
 import { memoryRetrieverRegistry } from './retriever';
 import { subscribe, type AikoEventMap, type AikoEventType } from './event-bus';
 import { getDisabledPluginIds, setPluginEnabled } from './persistence';
+import { loadDbConfig } from '../config/db';
+import { getDb } from '../db';
+import { Hono } from 'hono';
+import type { DbHandle } from '../db/client';
+
+type PluginApp = { route(path: string, sub: unknown): unknown };
 
 const loadedPlugins: LoadedPluginInfo[] = [];
 
@@ -46,7 +52,13 @@ export type PluginHostApi = {
   memory: {
     getSharedMemoryClient: typeof getSharedMemoryClient;
   };
+  /** 宿主扩展：数据库句柄 / 数据目录 / 路由挂载 */
+  db: DbHandle;
+  dataDir: string;
+  createRouter(): Hono;
+  mount(path: string, sub: PluginApp): void;
 };
+
 
 function defaultPluginsDir(): string {
   if (process.env.AIKO_PLUGINS_DIR) {
@@ -71,7 +83,10 @@ function interpolateTemplate(template: string, nowIso: string): string {
   return template.replaceAll('{{today}}', today);
 }
 
-async function loadOnePluginDir(pluginDir: string): Promise<void> {
+async function loadOnePluginDir(
+  pluginDir: string,
+  app?: PluginApp,
+): Promise<void> {
   const manifestPath = path.join(pluginDir, 'plugin.json');
   if (!existsSync(manifestPath)) return;
 
@@ -124,6 +139,13 @@ async function loadOnePluginDir(pluginDir: string): Promise<void> {
         subscribe,
         persistence: { getDisabledPluginIds, setPluginEnabled },
         memory: { getSharedMemoryClient },
+        db: getDb(),
+        dataDir: loadDbConfig(process.env).dataDir,
+        createRouter: () => new Hono(),
+        mount: (path: string, sub: { route(path: string, handler: unknown): unknown }) => {
+          if (!app) throw new Error('plugin mount unavailable: app not provided');
+          app.route(path, sub as never);
+        },
       };
       await mod.install(api);
     }
@@ -137,7 +159,10 @@ async function loadOnePluginDir(pluginDir: string): Promise<void> {
  * 扫描并加载插件根目录。返回成功加载的清单列表。
  * 目录不存在 → 返回空数组（不视为错误）。
  */
-export async function loadExternalPlugins(dir?: string): Promise<LoadedPluginInfo[]> {
+export async function loadExternalPlugins(
+  dir?: string,
+  app?: PluginApp,
+): Promise<LoadedPluginInfo[]> {
   const root = dir ?? pluginsRootDir();
   if (!existsSync(root)) {
     return [];
@@ -156,7 +181,7 @@ export async function loadExternalPlugins(dir?: string): Promise<LoadedPluginInf
   }
   for (const name of entries) {
     try {
-      await loadOnePluginDir(path.join(root, name));
+      await loadOnePluginDir(path.join(root, name), app);
     } catch (error) {
       console.warn(
         `[plugins] failed to load plugin ${name}, skipped:`,

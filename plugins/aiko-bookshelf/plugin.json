@@ -1,0 +1,14 @@
+{
+  "id": "aiko-bookshelf",
+  "name": "书架",
+  "version": "1.0.0",
+  "description": "她的阅读记忆只来自这个书架：上传 TXT/EPUB，切块入库（FTS + 可选向量），并在系统提示中注入书架与知识边界。",
+  "mountPoints": [
+    "context-contributor",
+    "api"
+  ],
+  "permissions": {
+    "network": []
+  },
+  "entry": "index.mjs"
+}

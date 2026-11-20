@@ -28,7 +28,8 @@ CREATE TABLE IF NOT EXISTS memories (
     source TEXT NOT NULL,
     turn INTEGER,
     tags TEXT,
-    vector BLOB NOT NULL
+    vector BLOB NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'memory'
 );
 """
 
@@ -53,6 +54,14 @@ class VectorStore:
         os.makedirs(os.path.dirname(os.path.abspath(self.db_path)), exist_ok=True)
         with self._connect() as conn, conn:
             conn.executescript(_SCHEMA)
+            try:
+                conn.execute("ALTER TABLE memories ADD COLUMN kind TEXT NOT NULL DEFAULT 'memory'")
+            except sqlite3.OperationalError:
+                pass
+            try:
+                conn.execute("ALTER TABLE memories ADD COLUMN kind TEXT NOT NULL DEFAULT 'memory'")
+            except sqlite3.OperationalError:
+                pass
 
     def _connect(self):
         # 显式 closing:sqlite3 的上下文管理器只管事务不关连接,
@@ -76,12 +85,13 @@ class VectorStore:
                 metadatas[i].get("turn"),
                 json.dumps(metadatas[i].get("tags", []), ensure_ascii=False),
                 np.asarray(vectors[i], dtype=np.float32).tobytes(),
+                metadatas[i].get("kind", "memory"),
             )
             for i, text in enumerate(texts)
         ]
         with self._connect() as conn, conn:
             conn.executemany(
-                "INSERT INTO memories (text, timestamp, source, turn, tags, vector) VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO memories (text, timestamp, source, turn, tags, vector, kind) VALUES (?, ?, ?, ?, ?, ?)",
                 rows,
             )
 
@@ -107,12 +117,17 @@ class VectorStore:
             cur = conn.execute("DELETE FROM memories")
             return cur.rowcount
 
-    def search(self, query_vector: np.ndarray, top_k: int = 5) -> list[StoredMemory]:
+    def delete_kind(self, kind: str) -> int:
+        with self._connect() as conn, conn:
+            cur = conn.execute("DELETE FROM memories WHERE kind = ?", (kind,))
+            return cur.rowcount
+
+    def search(self, query_vector: np.ndarray, top_k: int = 5, kind=None) -> list[StoredMemory]:
         """全量余弦检索。query_vector 需已归一化(T2 的 embed 输出满足)。
 
         库为空返回空列表,不抛错(降级约定)。
         """
-        rows, matrix = self._load_all()
+        rows, matrix = self._load_all(kind)
         if not rows or top_k <= 0:
             return []
         query = np.asarray(query_vector, dtype=np.float32).reshape(1, -1)
