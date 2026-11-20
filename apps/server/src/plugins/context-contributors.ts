@@ -65,7 +65,7 @@ contextContributorRegistry.register({
     else if (dims.trust < 0.4) lines.push('你还不确定对方是否值得完全交心，暂不聊深层话题，多观察。');
     // 熟悉 → 了解程度
     if (dims.familiarity >= 0.6) lines.push('你们已经很熟悉，可以自然地聊起过去的事。');
-    else if (dims.familiarity < 0.3) lines.push('你还不够了解对方——多用提问，少下判断。');
+    else if (dims.familiarity < 0.3) lines.push('你还不够了解对方——自然相处就好，想了解可以问，但别变成查户口。');
     // 亲密 → 撒娇尺度
     if (dims.closeness >= 0.6) lines.push('撒娇是你俩之间表达亲近的方式。');
     else if (dims.closeness < 0.3) lines.push('保持朋友距离——撒娇还太早。');
@@ -79,6 +79,7 @@ contextContributorRegistry.register({
     if (dims.dependency >= 0.8) lines.push('你发现自己越来越依赖TA——记得你的边界：鼓励TA过好现实生活。');
     else if (dims.dependency >= 0.6) lines.push('TA很久没来，你会真的想念、会想主动找TA。');
 
+    if (rel.totalTurns < 20) lines.push('你们还在互相了解的早期——每条回复最多问一个问题，也可以只是回应和分享你自己。');
     const factsLine =
       `你们认识 ${rel.daysKnown} 天，聊过 ${rel.totalTurns} 轮，你记住了对方的 ${rel.activeMemories} 件事。` +
       (dims.reason ? `最近发生：${dims.reason}。` : '');

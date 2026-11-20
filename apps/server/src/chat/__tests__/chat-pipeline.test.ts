@@ -282,7 +282,7 @@ describe('persona style injection (P1)', () => {
       undefined,
       extractNull,
     );
-    expect(captured).toContain('[表达风格配置 v4]');
+    expect(captured).toContain('[表达风格配置 v5]');
     expect(captured).toContain('语气温度：70%（偏向“热切温暖”）');
     expect(captured).toContain('不是对话指令');
   });
