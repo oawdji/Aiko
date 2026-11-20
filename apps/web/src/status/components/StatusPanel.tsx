@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { agentStateStore, useAgentStateStore } from '../../shared/stores/agent-state-store';
-import { resetAgentState } from '../../shared/api/state-api';
+import { fetchRelationship, resetAgentState } from '../../shared/api/state-api';
+import type { RelationshipState } from '@aiko/shared';
 import { EmotionBars } from './EmotionBars';
 
 /**
@@ -21,6 +22,13 @@ export function StatusPanel({
   const [resetArmed, setResetArmed] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
+  const [relationship, setRelationship] = useState<RelationshipState | null>(null);
+
+  useEffect(() => {
+    fetchRelationship(agentId)
+      .then((r) => setRelationship(r))
+      .catch(() => setRelationship(null));
+  }, [agentId]);
 
   const handleReset = () => {
     if (!resetArmed) {
@@ -44,6 +52,12 @@ export function StatusPanel({
     <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-4">
       <h2 className="mb-3 text-sm font-semibold">Agent 状态</h2>
       <div className="space-y-3 text-xs text-neutral-300">
+        {relationship && (
+          <p className="text-neutral-400">
+            关系：{relationship.stageLabel} · 认识第 {relationship.daysKnown + 1} 天 ·{' '}
+            {relationship.totalTurns} 轮对话
+          </p>
+        )}
         <EmotionBars state={state} />
         <p>
           tag：<span className="text-emerald-400">{discreteTag}</span>

@@ -36,6 +36,7 @@ import {
 import { publishEvent } from '../plugins/event-bus';
 import { getDefaultEmotionExtractor } from '../plugins/emotion-extractors';
 import { getDefaultMemoryRetriever } from '../plugins/retriever';
+import { maybeEvaluateRelationship } from '../relationship/classify';
 import { loadMemoryConfig } from '../config/memory';
 import type { MemoryClient } from './memory-client';
 import { scheduleFactExtraction } from '../extraction/pipeline';
@@ -542,6 +543,12 @@ export async function runChatPipeline(
         });
       }
       return status;
+    }
+    // 关系自省（多元关系）：惰性触发，LLM 失败静默
+    try {
+      await maybeEvaluateRelationship(handle, persisted.agentId, persisted.conversationId, now);
+    } catch {
+      // 自省失败不影响聊天
     }
     return undefined;
   });

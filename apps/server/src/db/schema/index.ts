@@ -9,3 +9,4 @@ export * from './prompt-snapshots';
 export * from './persona-proposals';
 export * from './proactive-messages';
 export * from './diary';
+export * from './relationship';

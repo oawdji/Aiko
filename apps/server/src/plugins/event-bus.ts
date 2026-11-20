@@ -29,6 +29,18 @@ export type AikoEventMap = {
   };
   /** 会话摘要生成成功（异步任务） */
   summary_ready: { conversationId: string; summaryId: string };
+  /** 关系维度更新（自省应用事件规则后） */
+  relationship_updated: {
+    agentId: string;
+    trust: number;
+    familiarity: number;
+    closeness: number;
+    fun: number;
+    dependency: number;
+    tension: number;
+    grudge: number;
+    reason: string;
+  };
   /** 日记生成成功（惰性补写昨日 / 手动请求） */
   diary_created: { agentId: string; diaryId: string; date: string };
   /** assistant 回复已落库（仅成功分支；失败占位不发布） */

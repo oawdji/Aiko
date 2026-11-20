@@ -1,9 +1,11 @@
 import {
   AgentStateResetResponseSchema,
+  RelationshipStateResponseSchema,
   StateEventPageQuerySchema,
   StateEventPageResponseSchema,
   type AgentStateEvent,
   type AgentStateResetResponse,
+  type RelationshipState,
   type StateEventPageResponse,
 } from '@aiko/shared';
 import { requestJson, type RequestOptions } from './client';
@@ -41,4 +43,17 @@ export function resetAgentState(
     AgentStateResetResponseSchema,
     { ...options, method: 'POST', body: { conversationId } },
   );
+}
+
+/** 关系阶段（成长体验）：认识时长 / 阶段。 */
+export async function fetchRelationship(
+  agentId: string,
+  options: RequestOptions = {},
+): Promise<RelationshipState> {
+  const res = await requestJson(
+    `/agents/${encodeURIComponent(agentId)}/relationship`,
+    RelationshipStateResponseSchema,
+    options,
+  );
+  return res.relationship;
 }

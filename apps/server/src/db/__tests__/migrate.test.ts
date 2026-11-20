@@ -21,6 +21,7 @@ const EXPECTED_TABLES = [
   'persona_proposals',
   'proactive_messages',
   'diary_entries',
+  'relationship_dimensions',
 ];
 
 describe('runMigrations', () => {
@@ -50,7 +51,7 @@ describe('runMigrations', () => {
     const applied = handle.sqlite
       .prepare('SELECT COUNT(*) AS count FROM __drizzle_migrations')
       .get() as { count: number };
-    expect(applied.count).toBe(8);
+    expect(applied.count).toBe(9);
 
     handle.sqlite.close();
   });

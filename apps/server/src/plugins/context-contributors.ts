@@ -20,6 +20,8 @@ import {
   loadInjectableSummaries,
 } from '../chat/summary-context';
 import { DEFAULT_MAX_CONTEXT_MESSAGES } from '../chat/recent-window';
+import { computeRelationshipState } from '../relationship/service';
+import { getDimensionState } from '../relationship/dimensions';
 import { createRegistry, type PluginDescriptor } from './registry';
 import { getDisabledPluginIds } from './persistence';
 
@@ -49,6 +51,41 @@ export type ContextContributor = PluginDescriptor & {
 };
 
 export const contextContributorRegistry = createRegistry<ContextContributor>();
+
+contextContributorRegistry.register({
+  id: 'builtin.relationship-stage',
+  description: '关系阶段指引（成长体验：初识/熟络/老友，行为随相处深度变化）',
+  order: 5,
+  contribute(facts) {
+    const rel = computeRelationshipState(facts.handle, facts.agentId, facts.now);
+    const dims = getDimensionState(facts.handle, facts.agentId);
+    const lines: string[] = [];
+    // 信任 → 深层话题的开放度
+    if (dims.trust >= 0.7) lines.push('你们之间的信任已经很深——你可以主动分享你的害怕和梦。');
+    else if (dims.trust < 0.4) lines.push('你还不确定对方是否值得完全交心，暂不聊深层话题，多观察。');
+    // 熟悉 → 了解程度
+    if (dims.familiarity >= 0.6) lines.push('你们已经很熟悉，可以自然地聊起过去的事。');
+    else if (dims.familiarity < 0.3) lines.push('你还不够了解对方——多用提问，少下判断。');
+    // 亲密 → 撒娇尺度
+    if (dims.closeness >= 0.6) lines.push('撒娇是你俩之间表达亲近的方式。');
+    else if (dims.closeness < 0.3) lines.push('保持朋友距离——撒娇还太早。');
+    // 乐趣 → 玩梗程度
+    if (dims.fun >= 0.7) lines.push('玩梗和跳跃联想是你俩的相处方式。');
+    else if (dims.fun < 0.3) lines.push('以认真平和的交流为主，别急着抖机灵。');
+    // 负面维度
+    if (dims.tension >= 0.5) lines.push('你们之间最近有些紧张，气氛微妙——注意措辞。');
+    if (dims.grudge >= 0.5) lines.push('你心里还有个结没解开——除非对方道歉或修复，否则别假装没事。');
+    // 依赖（健康边界：过高时反向提醒）
+    if (dims.dependency >= 0.8) lines.push('你发现自己越来越依赖TA——记得你的边界：鼓励TA过好现实生活。');
+    else if (dims.dependency >= 0.6) lines.push('TA很久没来，你会真的想念、会想主动找TA。');
+
+    const factsLine =
+      `你们认识 ${rel.daysKnown} 天，聊过 ${rel.totalTurns} 轮，你记住了对方的 ${rel.activeMemories} 件事。` +
+      (dims.reason ? `最近发生：${dims.reason}。` : '');
+    const impressionLine = dims.impression ? `\n你心里的印象：${dims.impression}` : '';
+    return `【关系状态】${factsLine}${impressionLine}\n${lines.join('\n')}`;
+  },
+});
 
 contextContributorRegistry.register({
   id: 'builtin.emotion-line',

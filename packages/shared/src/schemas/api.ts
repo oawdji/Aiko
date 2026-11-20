@@ -495,6 +495,30 @@ export const DiaryDeleteResponseSchema = z.object({
 });
 export type DiaryDeleteResponse = z.infer<typeof DiaryDeleteResponseSchema>;
 
+// ---------------------------------------------------------------------------
+// 关系阶段（成长体验：从陌生到亲密）
+// ---------------------------------------------------------------------------
+
+export const RelationshipStageSchema = z.enum(['stranger', 'familiar', 'close']);
+export type RelationshipStage = z.infer<typeof RelationshipStageSchema>;
+
+export const RelationshipStateSchema = z.object({
+  agentId: z.string().min(1),
+  firstMetAt: IsoDateTimeSchema.nullable(),
+  daysKnown: z.number().int().min(0),
+  totalTurns: z.number().int().min(0),
+  activeMemories: z.number().int().min(0),
+  stage: RelationshipStageSchema,
+  stageLabel: z.string().min(1),
+});
+export type RelationshipState = z.infer<typeof RelationshipStateSchema>;
+
+export const RelationshipStateResponseSchema = z.object({
+  ok: z.literal(true),
+  relationship: RelationshipStateSchema,
+});
+export type RelationshipStateResponse = z.infer<typeof RelationshipStateResponseSchema>;
+
 /** POST /api/conversations 请求体（手动新建会话） */
 export const ConversationCreateRequestSchema = z.object({
   agentId: z.string().min(1),

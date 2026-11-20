@@ -100,7 +100,10 @@ describe('bootstrapAgent (M2.2)', () => {
     expect(response.conversation.agentId).toBe(DEFAULT_AGENT_ID);
     expect(response.conversation.isArchived).toBe(false);
     expect(response.conversation.id.startsWith('conv_')).toBe(true);
-    expect(response.messages).toEqual([]);
+    // 初见问候：空会话时她会主动打招呼（成长体验起点）
+    expect(response.messages).toHaveLength(1);
+    expect(response.messages[0]!.role).toBe('assistant');
+    expect(response.messages[0]!.content).toContain('我是 Aiko');
     expect(response.latestStateEvent).toBeNull();
     expect(response.settings).toEqual({
       defaultAgentId: DEFAULT_AGENT_ID,

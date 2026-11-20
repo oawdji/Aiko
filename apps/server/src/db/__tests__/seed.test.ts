@@ -46,11 +46,11 @@ describe('seedDefaultData', () => {
     expect(agent.current_valence).toBe(0);
     expect(agent.current_arousal).toBe(0);
     expect(agent.current_tag).toBe('neutral');
-    expect(agent.active_persona_version).toBe(3);
+    expect(agent.active_persona_version).toBe(4);
     handle.sqlite.close();
   });
 
-  it('seeds default persona version (v3) with content and hash from the generated source', () => {
+  it('seeds default persona version (v4) with content and hash from the generated source', () => {
     const handle = makeFreshHandle();
     seedDefaultData(handle, '2026-11-12T00:00:00.000Z');
 
@@ -64,7 +64,7 @@ describe('seedDefaultData', () => {
       is_active: number;
     };
 
-    expect(persona.version).toBe(3);
+    expect(persona.version).toBe(4);
     expect(persona.is_active).toBe(1);
     expect(persona.persona_core_md).toBe(PERSONA_CORE_MD);
     expect(persona.persona_core_hash).toBe(PERSONA_CORE_HASH);

@@ -8,6 +8,7 @@ import {
 } from './repository';
 import { createRegistry, type PluginDescriptor } from '../plugins/registry';
 import { getDisabledPluginIds } from '../plugins/persistence';
+import { getDimensionState } from '../relationship/dimensions';
 
 export type StrategyPick = {
   strategy: ProactiveStrategy;
@@ -33,6 +34,8 @@ export type ProactiveStrategyContext = {
 export type ProactiveStrategyPlugin = PluginDescriptor & {
   /** 升序，越小越优先 */
   priority: number;
+  /** 维度门控：不满足则跳过该策略（多元关系成长） */
+  requires?: Partial<Record<'trust' | 'familiarity' | 'closeness' | 'fun' | 'dependency', number>>;
   pick(ctx: ProactiveStrategyContext): StrategyPick | null;
 };
 
@@ -50,6 +53,7 @@ export const proactiveStrategyRegistry = createRegistry<ProactiveStrategyPlugin>
 
 proactiveStrategyRegistry.register({
   id: 'emotion_care',
+  requires: { dependency: 0.4 },
   description: '上次对话显著负面（valence ≤ -0.5）且已沉淀 ≥24h、近期未跟进',
   priority: 1,
   pick({ handle, agentId, nowMs }) {
@@ -78,6 +82,7 @@ proactiveStrategyRegistry.register({
 
 proactiveStrategyRegistry.register({
   id: 'memory_recall',
+  requires: { familiarity: 0.4 },
   description: '较早（≥7 天）且近期未被访问的 active 记忆回想',
   priority: 2,
   pick({ handle, agentId, nowMs }) {
@@ -124,8 +129,19 @@ export function pickStrategy(
   nowMs: number,
 ): StrategyPick | null {
   const disabled = new Set(getDisabledPluginIds(handle));
+  const dims = getDimensionState(handle, agentId);
+  console.log('[dbg-pick] dims:', JSON.stringify(dims));
+  const meets = (p: { requires?: ProactiveStrategyPlugin['requires'] }): boolean => {
+    if (!p.requires) return true;
+    for (const [key, min] of Object.entries(p.requires)) {
+      const current = (dims as unknown as Record<string, number>)[key];
+      if (current === undefined || current < (min as number)) return false;
+    }
+    return true;
+  };
   const sorted = [...proactiveStrategyRegistry.all()]
     .filter((p) => !disabled.has(p.id))
+    .filter((p) => meets(p))
     .sort(
       (a, b) => a.priority - b.priority || a.id.localeCompare(b.id),
     );

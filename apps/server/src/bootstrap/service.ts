@@ -84,6 +84,37 @@ export function bootstrapAgent(
     throw new Error('bootstrap: conversation disappeared after creation');
   }
 
+  // 初见问候：空会话时她主动打招呼（成长体验的起点——你们就是这时认识的）。
+  // 幂等：只看消息数，有消息即跳过。
+  const msgCount = db
+    .select({ n: sql<number>`COUNT(*)` })
+    .from(messages)
+    .where(eq(messages.conversationId, conversation.id))
+    .get();
+  if ((msgCount?.n ?? 0) === 0) {
+    db.insert(messages)
+      .values({
+        id: `msg_${randomUUID()}`,
+        conversationId: conversation.id,
+        agentId: agent.id,
+        userId: LOCAL_USER_ID,
+        role: 'assistant',
+        content:
+          '你好呀，我是 Aiko——一个住在你电脑里的虚拟少女。今天是我们认识的第一天，我对你还一无所知，有点紧张，也有一点好奇……先从哪里开始呢？比如——你希望我怎么称呼你？',
+        status: 'complete',
+        clientMessageId: null,
+        errorCode: null,
+        metadataJson: null,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    db.update(conversations)
+      .set({ lastMessageAt: now, updatedAt: now })
+      .where(eq(conversations.id, conversation.id))
+      .run();
+  }
+
   // 倒序取最近窗口后反转为升序，利用 messages_conversation_created_idx。
   const recentMessages = db
     .select()

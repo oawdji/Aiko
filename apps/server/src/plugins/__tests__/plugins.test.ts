@@ -48,18 +48,19 @@ describe('context contributor 插件挂载点', () => {
   it('注册了 4 个内置插件，order 为 10/20/30/40', () => {
     const builtins = contextContributorRegistry.all().filter((p) => p.id.startsWith('builtin.'));
     expect(builtins.map((p) => p.id)).toEqual([
+      'builtin.relationship-stage',
       'builtin.emotion-line',
       'builtin.long-term-memory',
       'builtin.semantic-memory',
       'builtin.conversation-summary',
     ]);
-    expect(builtins.map((p) => p.order)).toEqual([10, 20, 30, 40]);
+    expect(builtins.map((p) => p.order)).toEqual([5, 10, 20, 30, 40]);
   });
 
   it('按 order 稳定排序运行；无内容块被过滤', async () => {
     const custom: ContextContributor = {
       id: 'test.custom-first',
-      order: 5,
+      order: 4,
       contribute: () => '（自定义上下文块）',
     };
     contextContributorRegistry.register(custom);
@@ -77,12 +78,13 @@ describe('context contributor 插件挂载点', () => {
         memoryHits: [{ content: '用户在学做饭' }],
         semanticHits: ['历史切片'],
       });
-      // 自定义(order 5) → 情绪(10) → 长期记忆(20) → 语义(30)；摘要(40) 无数据为 null 被过滤
-      expect(out).toHaveLength(4);
+      // 自定义(order 4) → 关系(5) → 情绪(10) → 长期记忆(20) → 语义(30)；摘要(40) 无数据被过滤
+      expect(out).toHaveLength(5);
       expect(out[0]).toBe('（自定义上下文块）');
-      expect(out[1]).toContain('【当前情绪状态】');
-      expect(out[2]).toContain('关于用户的长期记忆');
-      expect(out[3]).toContain('[相关记忆]');
+      expect(out[1]).toContain('【关系状态】');
+      expect(out[2]).toContain('【当前情绪状态】');
+      expect(out[3]).toContain('关于用户的长期记忆');
+      expect(out[4]).toContain('[相关记忆]');
     } finally {
       contextContributorRegistry.unregister('test.custom-first');
     }

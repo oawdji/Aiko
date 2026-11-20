@@ -1,0 +1,23 @@
+CREATE TABLE `relationship_dimensions` (
+	`agent_id` text PRIMARY KEY NOT NULL,
+	`trust` real DEFAULT 0.2 NOT NULL,
+	`familiarity` real DEFAULT 0.1 NOT NULL,
+	`closeness` real DEFAULT 0.15 NOT NULL,
+	`fun` real DEFAULT 0.2 NOT NULL,
+	`dependency` real DEFAULT 0.05 NOT NULL,
+	`tension` real DEFAULT 0 NOT NULL,
+	`grudge` real DEFAULT 0 NOT NULL,
+	`impression` text DEFAULT '' NOT NULL,
+	`reason` text DEFAULT '' NOT NULL,
+	`eval_message_count` integer DEFAULT 0 NOT NULL,
+	`change_date` text,
+	`daily_changes_json` text DEFAULT '{}' NOT NULL,
+	`updated_at` text NOT NULL,
+	CONSTRAINT `relationship_trust_range` CHECK(`relationship_dimensions`.`trust` >= 0 AND `relationship_dimensions`.`trust` <= 1),
+	CONSTRAINT `relationship_familiarity_range` CHECK(`relationship_dimensions`.`familiarity` >= 0 AND `relationship_dimensions`.`familiarity` <= 1),
+	CONSTRAINT `relationship_closeness_range` CHECK(`relationship_dimensions`.`closeness` >= 0 AND `relationship_dimensions`.`closeness` <= 1),
+	CONSTRAINT `relationship_fun_range` CHECK(`relationship_dimensions`.`fun` >= 0 AND `relationship_dimensions`.`fun` <= 1),
+	CONSTRAINT `relationship_dependency_range` CHECK(`relationship_dimensions`.`dependency` >= 0 AND `relationship_dimensions`.`dependency` <= 1),
+	CONSTRAINT `relationship_tension_range` CHECK(`relationship_dimensions`.`tension` >= 0 AND `relationship_dimensions`.`tension` <= 1),
+	CONSTRAINT `relationship_grudge_range` CHECK(`relationship_dimensions`.`grudge` >= 0 AND `relationship_dimensions`.`grudge` <= 1)
+);

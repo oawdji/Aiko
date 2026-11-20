@@ -206,6 +206,10 @@ describe('evaluateProactive: 内容策略', () => {
     enable();
     insertUserMessage('msg_ec', hoursAgoIso(2));
     insertNegativeEmotion('state_neg', hoursAgoIso(48), 'msg_ec');
+    // 维度门控：依赖 ≥ 0.4 才允许 emotion_care
+    handle.sqlite
+      .prepare('INSERT INTO relationship_dimensions (agent_id, dependency, updated_at) VALUES (?, ?, ?)')
+      .run(DEFAULT_AGENT_ID, 0.5, T0);
     const r = await evaluate();
     expect(r.send).toBe(true);
     expect(r.message!.strategy).toBe('emotion_care');
@@ -241,6 +245,10 @@ describe('evaluateProactive: 内容策略', () => {
     enable();
     insertUserMessage('msg_mr', hoursAgoIso(2));
     insertOldMemory('用户正在学做饭');
+    // 维度门控：熟悉 ≥ 0.4 才允许 memory_recall
+    handle.sqlite
+      .prepare('INSERT OR REPLACE INTO relationship_dimensions (agent_id, familiarity, updated_at) VALUES (?, ?, ?)')
+      .run(DEFAULT_AGENT_ID, 0.5, T0);
     const r = await evaluate();
     expect(r.send).toBe(true);
     expect(r.message!.strategy).toBe('memory_recall');
