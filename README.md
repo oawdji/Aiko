@@ -4,7 +4,7 @@
 
 Aiko 是一个运行在本地的对话角色。她不是"带聊天框的工具"，而是一个连续存在的角色：有稳定的人格锚点，有随对话缓慢变化、可解释可追溯的情绪，有跨会话的长期记忆。所有数据保存在本机，对用户完全透明、可修正、可删除。
 
-项目状态：**规划功能已全部完成**（对话 / 情绪 / 记忆 / 人格 / 主动行为），432 个测试全绿，可日常使用。
+项目状态：**规划功能已全部完成**（对话 / 情绪 / 记忆 / 人格 / 主动行为），441 个测试全绿，可日常使用。
 
 ## 功能特性
 
@@ -59,7 +59,7 @@ Aiko 是一个运行在本地的对话角色。她不是"带聊天框的工具"�
 聊天协议：Vercel AI SDK v7（UIMessage Stream，已锁定 ai@7.0.166 / @ai-sdk/react@4.0.170）
 状态管理：自研轻量 store（createStore + useSyncExternalStore，无外部状态库）
 工程：pnpm workspace monorepo
-测试：Vitest（workspace 统一版本，432 个用例全绿）
+测试：Vitest（workspace 统一版本，441 个用例全绿）
 ```
 
 ## 快速启动
@@ -76,7 +76,7 @@ pnpm dev
 pnpm dev:server
 pnpm dev:web
 
-pnpm test          # 全部测试（432 个）
+pnpm test          # 全部测试（441 个）
 pnpm lint          # ESLint
 pnpm gen:persona   # 从 docs/persona-core.md 重新生成新库初始锚点（已有数据库请在面板中编辑）
 ```
